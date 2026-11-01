@@ -74,3 +74,41 @@ test('health rejects a connected PostgreSQL database without the sessions table'
  await db.query('DROP TABLE sessions');
  assert.equal((await request(app).get('/health')).status,503);
 });
+
+test('super-admin manages other accounts without privilege escalation or stale sessions',async t=>{
+ const db=new PGlite();t.after(()=>db.close());await db.exec(await readFile(new URL('../src/schema.sql',import.meta.url),'utf8'));
+ const hash=await bcrypt.hash('account-test-password',4);
+ for(const [email,role] of [['super@example.test','superadmin'],['admin@example.test','admin'],['tech@example.test','technician']])await db.query('INSERT INTO users(email,name,password_hash,role) VALUES($1,$2,$3,$4)',[email,email,hash,role]);
+ const app=createApp({db,sessionStore:new session.MemoryStore(),sessionSecret:'q'.repeat(64),production:false});
+ async function login(email,password='account-test-password'){
+  const agent=request.agent(app);const page=await agent.get('/login');const csrf=page.text.match(/name="csrf-token" content="([^"]+)"/)[1];const result=await agent.post('/login').type('form').send({_csrf:csrf,email,password});return {agent,result};
+ }
+ async function token(agent){return (await agent.get('/')).text.match(/name="csrf-token" content="([^"]+)"/)[1];}
+ const root=await login('super@example.test'),admin=await login('admin@example.test'),tech=await login('tech@example.test');
+ assert.equal(root.result.status,302);const csrf=await token(root.agent),adminCsrf=await token(admin.agent),techCsrf=await token(tech.agent);
+ assert.match((await root.agent.get('/users')).text,/Save account changes/);
+ const payload={name:'Managed Admin',email:'admin@example.test',role:'admin',active:'yes',password:'',_csrf:csrf};
+ assert.equal((await admin.agent.post('/users/3/manage').type('form').send({...payload,_csrf:adminCsrf})).status,403);
+ assert.equal((await tech.agent.post('/users/2/manage').type('form').send({...payload,_csrf:techCsrf})).status,403);
+ assert.equal((await admin.agent.post('/users').type('form').send({_csrf:adminCsrf,name:'Escalation',email:'bad@example.test',role:'superadmin',password:'account-test-password'})).status,403);
+ assert.equal((await root.agent.post('/users/1/manage').type('form').send(payload)).status,400);
+ assert.equal((await root.agent.post('/users/2/manage').type('form').send({...payload,active:'no'})).status,302);
+ assert.equal((await admin.agent.get('/users')).status,302);
+ assert.equal((await login('admin@example.test')).result.status,401);
+ assert.equal((await root.agent.post('/users/2/manage').type('form').send({...payload,active:'yes',role:'technician',password:'replacement-password'})).status,302);
+ assert.equal((await login('admin@example.test')).result.status,401);
+ const changed=await login('admin@example.test','replacement-password');assert.equal(changed.result.status,302);assert.equal((await changed.agent.get('/users')).status,403);
+ assert.equal((await admin.agent.get('/')).status,302,'Re-enabling an account must not restore revoked sessions');
+ assert.equal((await root.agent.post('/users').type('form').send({_csrf:csrf,name:'Second Super',email:'second@example.test',role:'superadmin',password:'account-test-password'})).status,302);
+ assert.equal((await root.agent.post('/users/4/manage').type('form').send({...payload,email:'second@example.test',role:'admin'})).status,302,'Super-admin can manage other super-admin accounts');
+ assert.equal((await root.agent.post('/clients').type('form').send({_csrf:csrf,name:'Super client'})).status,302);
+ assert.equal((await root.agent.get('/clients/1')).status,200);
+});
+
+test('super-admin schema upgrade preserves existing administrator accounts',async t=>{
+ const db=new PGlite();t.after(()=>db.close());
+ await db.exec("CREATE TABLE users(id SERIAL PRIMARY KEY,email TEXT UNIQUE NOT NULL,name TEXT NOT NULL,password_hash TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('admin','technician'))); INSERT INTO users(email,name,password_hash,role) VALUES('existing@example.test','Existing user','existing-hash','admin');");
+ await db.exec(await readFile(new URL('../src/schema.sql',import.meta.url),'utf8'));
+ const row=(await db.query('SELECT * FROM users WHERE id=1')).rows[0];assert.equal(row.name,'Existing user');assert.equal(row.password_hash,'existing-hash');assert.equal(row.is_active,true);assert.equal(row.auth_version,0);
+ await db.query("UPDATE users SET role='superadmin' WHERE id=1");assert.equal((await db.query('SELECT role FROM users WHERE id=1')).rows[0].role,'superadmin');
+});

@@ -22,3 +22,11 @@ Still required: authenticated Railway deployment, public HTTPS/domain checks, ac
 - Health returns 503 when PostgreSQL is connected but required tables are missing. Health returns 200 after startup repairs the schema.
 - `npm run build` and `git diff --check` passed.
 - Railway deployment remains unverified. Deploy this fix or run `npm run migrate` inside the web service against its existing database, then restart it. No database reset is necessary.
+
+## Super-admin management — 2026-11-01
+
+- Six tests passed, zero skipped/failed, with the real PostgreSQL startup test enabled.
+- Verified super-admin account editing, password replacement, role changes, disable/re-enable behavior, and immediate session revocation. Administrator/technician attempts to manage accounts or escalate to super-admin are denied. Self-editing through the management endpoint is denied.
+- Verified the schema upgrade preserves legacy users and password hashes and adds account status/session-version defaults.
+- Verified the stdin-based `create-super-admin` command promotes an existing account and hashes its new password against PostgreSQL.
+- Syntax validation and diff whitespace checks passed. No production account has been created from this environment; the deployment operator must run the secure creation command in the Railway web service.

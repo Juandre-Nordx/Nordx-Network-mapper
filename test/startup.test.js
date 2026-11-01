@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {once} from 'node:events';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
@@ -43,5 +43,8 @@ test('real server initializes an empty PostgreSQL schema and preserves sessions 
  const dashboard=await request(base).get('/').set('Cookie',cookie);assert.equal(dashboard.status,200);assert.match(dashboard.text,/Preserved client/);
  await db.query('DROP TABLE sessions');assert.equal((await request(base).get('/health')).status,503);
  await stop(child);({child,base}=await start());assert.equal((await request(base).get('/login')).status,200);assert.equal((await request(base).get('/health')).status,200);assert.equal((await db.query('SELECT name FROM clients')).rows[0].name,'Preserved client');
+ const promoted=spawnSync(process.execPath,['scripts/create-super-admin.js','startup@example.test','Super Owner'],{cwd:new URL('../',import.meta.url),env:{...process.env,DATABASE_URL:url.toString()},input:'secure-super-admin-password\n',encoding:'utf8'});
+ assert.equal(promoted.status,0,promoted.stderr);
+ const owner=(await db.query('SELECT role,is_active,password_hash FROM users WHERE email=$1',['startup@example.test'])).rows[0];assert.equal(owner.role,'superadmin');assert.equal(owner.is_active,true);assert.equal(await bcrypt.compare('secure-super-admin-password',owner.password_hash),true);
  await stop(child);
 });

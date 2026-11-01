@@ -10,12 +10,12 @@ New application built with Node.js 24, Express 5, EJS, and PostgreSQL. There is 
 2. Run `npm ci` in the repository root.
 3. Copy `.env.example` to `.env`. Set `DATABASE_URL`, generate a random `SESSION_SECRET` using the command in that file, and set `UPLOAD_DIR` to a writable directory.
 4. Run `npm run migrate`. Migrations are additive, transactional, serialized with a PostgreSQL advisory lock, and safe to repeat. Back up production data before any future schema changes.
-5. Create the first administrator without putting the password in shell history:
+5. Create the first super administrator without putting the password in shell history:
 
    ```bash
    read -r -s -p 'New administrator password (12+ characters): ' admin_password
    printf '\n'
-   printf '%s' "$admin_password" | npm run create-admin -- admin@example.com "Administrator"
+   printf '%s' "$admin_password" | npm run create-super-admin -- owner@example.com "Super Administrator"
    unset admin_password
    ```
 
@@ -24,7 +24,7 @@ New application built with Node.js 24, Express 5, EJS, and PostgreSQL. There is 
 
 ## Features
 
-- Administrator account creation and team management; administrator or technician roles.
+- Super-administrator, administrator, and technician roles; super-admins manage other accounts, reset passwords, change roles, and disable/re-enable access.
 - Clients and sites, with explicit technician assignments per client.
 - Network and CCTV plans with blank, office, and CCTV templates.
 - Drag devices, connect nodes, delete selected devices, save and reopen diagrams.
@@ -34,7 +34,7 @@ New application built with Node.js 24, Express 5, EJS, and PostgreSQL. There is 
 - PDF exports of saved topology and labels, restricted to authorized users.
 - PostgreSQL-backed sessions, CSRF tokens, rate-limited login, secure production cookies, Helmet headers, parameterized SQL, and non-root container runtime.
 
-Technicians may read and edit all sites, plans, equipment, and uploads for assigned clients. Only administrators may create clients, manage users, and assign access. There is no public registration.
+Technicians may read and edit all sites, plans, equipment, and uploads for assigned clients. Administrators and super-admins may create clients and users and assign client access. Only super-admins may edit other accounts, reset their passwords, disable/re-enable access, or create another super-admin. There is no public registration.
 
 ## Railway deployment
 
@@ -74,7 +74,7 @@ For an already linked service, subsequent CLI deployments are `railway status`, 
 
 ## Current limits
 
-This is an initial implementation, not a fully audited production release. There is no password reset/change UI, user deactivation, MFA, audit trail, record deletion/editing UI, custom template management, undo/redo, device-to-inventory linking, or multi-user edit conflict detection (last saved diagram wins). PDF exports contain the saved topology, not floor-plan images or an inventory report. Uploads have file signature checks but no image re-encoding or malware scanning; only trusted technicians should receive upload access. PDF generation is synchronous and diagrams are limited to 300 nodes/600 edges. No queues, scheduled tasks, or workers are needed for this version. Login rate limits use process memory; run one web replica until a shared limiter is implemented. A Railway volume also constrains scaling; use object storage before scaling beyond one replica.
+This is an initial implementation, not a fully audited production release. There is no self-service password reset/change UI, MFA, audit trail, record deletion/editing UI, custom template management, undo/redo, device-to-inventory linking, or multi-user edit conflict detection (last saved diagram wins). PDF exports contain the saved topology, not floor-plan images or an inventory report. Uploads have file signature checks but no image re-encoding or malware scanning; only trusted technicians should receive upload access. PDF generation is synchronous and diagrams are limited to 300 nodes/600 edges. No queues, scheduled tasks, or workers are needed for this version. Login rate limits use process memory; run one web replica until a shared limiter is implemented. A Railway volume also constrains scaling; use object storage before scaling beyond one replica.
 
 ## Operations
 
@@ -83,3 +83,18 @@ Logs go to stdout/stderr without logging request bodies or secrets. `/health` ch
 ### Recovering a missing sessions table
 
 If logs report `relation "sessions" does not exist`, the database selected by the running web service has not received the schema. Deploy the startup initialization fix and keep the start command as `npm start`; startup will create the missing tables safely before accepting requests. Alternatively, run `npm run migrate` inside that Railway web service, using its existing `DATABASE_URL`, then restart it. Do not drop the database or regenerate the session secret. Verify the logs show `Database schema ready.` followed by the listening message, and request `/health` before signing in. If creation fails, check that the selected PostgreSQL user has schema/table creation permission and that the service points to the intended database.
+
+## Super-admin account management
+
+The `superadmin` role can access all clients and sites and manage every other user in **Team**: name, email, role, active status, and password. Account updates immediately revoke existing sessions; re-enabling a user does not revive old sessions. Passwords are hashed and cannot be viewed. Disabling preserves records and assignments. Self-demotion and self-disable are blocked. Account changes are serialized and recheck the actor's active super-admin status to avoid concurrent lockouts.
+
+After deploying this version, open a shell **inside the Railway web service** and run:
+
+```bash
+read -r -s -p 'Super-admin password (12–128 characters): ' owner_password
+printf '\n'
+printf '%s' "$owner_password" | npm run create-super-admin -- your-email@example.com "Your name"
+unset owner_password
+```
+
+Use your actual email and name. This command creates the account or promotes the matching existing email, replaces its password, enables it, and revokes its previous sessions. It applies the safe schema migration first. Use the web service's existing `DATABASE_URL`; do not paste production credentials or passwords into chat. Sign in with that email and password, then open **Team**. No built-in super-admin password is created. Ordinary administrators retain account-creation access for administrators and technicians; they cannot modify existing users or grant super-admin privileges.
