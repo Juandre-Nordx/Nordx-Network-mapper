@@ -32,7 +32,7 @@ New application built with Node.js 24, Express 5, EJS, and PostgreSQL. There is 
 - Private PNG/JPEG uploads with a 10 MB limit and file-signature checks.
 - Floor-plan image backgrounds saved with the plan.
 - PDF exports of saved topology and labels, restricted to authorized users.
-- PostgreSQL-backed sessions, CSRF tokens, rate-limited login, secure production cookies, Helmet headers, parameterized SQL, and non-root container runtime.
+- PostgreSQL-backed sessions, CSRF tokens, rate-limited login, secure production cookies, Helmet headers, parameterized SQL, and an application process that drops to non-root UID/GID 1000 before serving requests.
 
 Technicians may read and edit all sites, plans, equipment, and uploads for assigned clients. Administrators and super-admins may create clients and users and assign client access. Only super-admins may edit other accounts, reset their passwords, disable/re-enable access, or create another super-admin. There is no public registration.
 
@@ -49,10 +49,11 @@ Deployment requires authenticated Railway access and access to this GitHub repos
    | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (replace `Postgres` with the actual database service name) |
    | `SESSION_SECRET` | Generate 48 random bytes locally; store securely in Railway variables |
    | `APP_URL` | Actual HTTPS domain assigned to this service |
-   | `UPLOAD_DIR` | `/data/uploads` |
+   | `UPLOAD_DIR` | `/var/uploads` (match your existing volume mount) |
+   | `TRUST_PROXY_HOPS` | `1` (one trusted Railway proxy hop) |
 
    Railway supplies `PORT`; the server binds to `0.0.0.0`. Preserve database URL TLS settings and use verified certificates if connecting through TLS. No credentials belong in source control.
-3. Add a persistent volume mounted at `/data`. Confirm it is writable by UID/GID 1000 (the container's `node` user). The image runs as a non-root user; a root-owned volume may need its ownership prepared through Railway's supported volume controls before startup. Do not store permanent uploads on the ephemeral filesystem.
+3. Use a persistent volume mounted at `/var/uploads`, matching `UPLOAD_DIR`. Preserve an existing volume and its mount path; if yours uses another path, set `UPLOAD_DIR` to that path instead. When Railway supplies `RAILWAY_VOLUME_MOUNT_PATH`, the application requires uploads to be inside that mount. The container starts with a brief privileged initialization to create/chown the upload directory, then drops to UID/GID 1000 before database initialization and HTTP startup. Only the directory itself is chowned; existing file contents and permissions are preserved. A write/delete probe checks storage before accepting requests. If your platform overrides the image user to a non-root UID, prepare the volume ownership for UID/GID 1000 through the platform first. Do not store permanent uploads on the ephemeral filesystem.
 4. Generate the public domain under Networking, set `APP_URL` to its HTTPS address, then deploy. `npm start` runs the additive, transactional migrations against the web service's own `DATABASE_URL` before opening the HTTP listener. A PostgreSQL advisory lock serializes concurrent startup migrations. The server exits if migration or schema validation fails, and `/health` checks that all required tables, including `sessions`, exist. A separate pre-deploy command is not required. No records are deleted or seeded during startup.
 5. Run the one-time administrator command above **inside the deployed service** using Railway's service shell/SSH facilities; do not use `railway run` for a private database unless the local machine has access to that private network. No automatic seeding runs.
 6. Verify `/health` returns HTTP 200 and sign in. Exercise the checklist below before declaring production ready.
@@ -78,7 +79,7 @@ This is an initial implementation, not a fully audited production release. There
 
 ## Operations
 
-Logs go to stdout/stderr without logging request bodies or secrets. `/health` checks database connectivity. Shutdown handles SIGTERM/SIGINT. Back up PostgreSQL **and** `/data/uploads` together: metadata is in PostgreSQL, image bytes are on the volume. Treat session secrets as credentials; rotating them signs out current sessions. Keep Node/container and npm dependencies updated. Never run tests against the production database.
+Logs go to stdout/stderr without logging request bodies or secrets. `/health` checks database connectivity. Shutdown handles SIGTERM/SIGINT. Back up PostgreSQL **and** your configured upload volume together: metadata is in PostgreSQL, image bytes are on the volume. Treat session secrets as credentials; rotating them signs out current sessions. Keep Node/container and npm dependencies updated. Never run tests against the production database.
 
 ### Recovering a missing sessions table
 
@@ -106,3 +107,18 @@ Click **Connect devices**, select the master device first and the slave device s
 ## Mobile canvas navigation
 
 On a phone or desktop, drag empty canvas space to pan around the diagram. Enable **Pan canvas** to pan from anywhere, including over a device or connection, without editing it. Turn Pan canvas off to drag devices normally; **Connect devices** also turns it off. **Reset view** restores the starting view. Small screens use a closer starting view, and the canvas resizes with the viewport. Navigation stays local to the view and never changes saved device coordinates or connection data. Floor-plan images move with the devices as you pan. Scroll the page outside the canvas to reach the rest of the screen. Pinch zoom is not part of this change.
+
+## Railway upload/proxy troubleshooting
+
+The message `EACCES: permission denied, mkdir './var'` means a development upload path was configured in the production container. For a volume mounted at `/var/uploads`, use:
+
+```env
+NODE_ENV=production
+APP_URL=https://your-actual-domain
+UPLOAD_DIR=/var/uploads
+TRUST_PROXY_HOPS=1
+```
+
+Keep the existing volume and align the path instead of deleting or recreating it. Redeploy the updated image. Startup should log `Upload storage ready at /var/uploads (uid 1000).`, `Proxy hops: 1; production mode: true.`, and `Database schema ready.` before listening. A storage permission failure now stops startup with an actionable message. If existing uploaded files were previously created by a different user and are unreadable, use the platform's administrative volume controls to grant UID 1000 access to those files; do not make the volume world-writable.
+
+Railway service/environment identifiers enable production mode even if `NODE_ENV` was copied as `development`. Explicitly set it to `production` too. Express trusts a bounded numeric proxy-hop count (default 1 in production/Railway and 0 locally); it never enables unrestricted `trust proxy=true`. Incorrect topology can affect client IP rate limits, so adjust the hop count only when your proxy chain requires it. Session cookies remain secure behind HTTPS. A relative production `UPLOAD_DIR` or a path outside the declared Railway volume is rejected to prevent accidental ephemeral storage.

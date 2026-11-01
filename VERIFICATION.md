@@ -42,3 +42,10 @@ Still required: authenticated Railway deployment, public HTTPS/domain checks, ac
 - Mobile Chromium with a 390 × 844 touch viewport: real CDP touch swipes moved the canvas view, Reset view restored its starting position, Pan canvas allowed swiping from a device without moving that device, and normal device dragging remained available with pan mode off.
 - Saved coordinates were checked in PostgreSQL after panning and remained unchanged. Existing desktop connection-port creation, editing, persistence, duplicate prevention, and PDF download also passed in the browser.
 - JavaScript syntax and whitespace checks passed. This validates emulated touch interaction; physical iPhone/Android testing and Railway deployment remain outstanding.
+
+## Railway proxy and upload storage — 2026-11-01
+
+- Nine tests passed, including Railway production-mode detection with `NODE_ENV=development`, bounded proxy-hop configuration, per-forwarded-IP login rate limits, secure cookies, persistent-path validation, and startup write-probe success/failure.
+- Container validation used a new volume deliberately owned by root with mode 0700. Startup prepared its upload directory and dropped the application process to UID/GID 1000. HTTPS-forwarded login, PNG upload, authenticated download, and file/session persistence after container restart all passed against PostgreSQL. No `EACCES` or unexpected forwarded-header validation error was produced by the application.
+- Local image build used an uncommitted proxy-CA adapter for this environment. The committed Dockerfile retains plain `npm ci` for Railway compatibility. The short root initialization only adjusts the target directory owner, not existing files or permissions; HTTP/database work runs after privilege drop.
+- Railway variable changes and deployment are still required. Preserve the existing volume, set production variables, align `UPLOAD_DIR` with `/var/uploads`, and deploy this branch. No production files or database data were modified during local validation.
