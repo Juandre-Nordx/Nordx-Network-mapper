@@ -56,3 +56,10 @@ Still required: authenticated Railway deployment, public HTTPS/domain checks, ac
 - Chromium against a private PostgreSQL schema verified adding a VoIP phone, numeric dimension changes, mouse corner resizing, saved size restoration, touch corner resizing, and numeric mobile controls. Existing port editing, mobile panning, device dragging, and coordinate preservation checks also passed.
 - PDF export succeeded and `pdftotext` confirmed the VoIP phone label and existing port schedule. PDF rectangles use the saved device dimensions.
 - Syntax and whitespace checks passed. No database migration is needed; Railway deployment and physical-device testing remain outstanding.
+
+## Named cabinet groups — 2026-11-01
+
+- Nine automated tests passed. Diagram coverage verifies group and membership persistence and rejects dangling memberships, duplicate group IDs, and blank names. Existing legacy diagrams, dimensions, ports, accounts, storage, and PostgreSQL startup workflows remain covered.
+- Desktop/mobile Chromium against PostgreSQL verified creation, batch assignment, renaming, per-device ungrouping, reassignment from another group, deletion without loss of devices/connections, and saved/reopened group outlines. Mouse and touch header dragging preserved member offsets.
+- PDF download succeeded; `pdftotext` confirmed the cabinet name, its device list, and the existing connection port schedule. JavaScript syntax and whitespace checks passed.
+- Railway deployment and physical-device validation remain outstanding. No database migration is needed for this feature.

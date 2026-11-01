@@ -40,6 +40,51 @@ function resizeDevice(node,width,height){
  dirty=true;render();
 }
 sizeForm.addEventListener('submit',e=>{e.preventDefault();const node=data.nodes.find(n=>n.id===selected);if(!node||!sizeForm.reportValidity())return;resizeDevice(node,Number(widthInput.value),Number(heightInput.value));status.textContent='Device size updated. Save your diagram.';});
+data.groups ||= [];
+let activeGroupId=null,groupDrag=null;
+const groupPicker=document.querySelector('#group-picker');
+const deviceGroup=document.querySelector('#device-group');
+const groupName=document.querySelector('#group-name');
+const membersDialog=document.querySelector('#group-dialog');
+const membersForm=document.querySelector('#group-members-form');
+let editingGroupId=null;
+function groupBounds(group){
+ const members=data.nodes.filter(n=>n.groupId===group.id);if(!members.length)return null;
+ const left=Math.min(...members.map(n=>n.x-dimensions(n).width/2))-20,right=Math.max(...members.map(n=>n.x+dimensions(n).width/2))+20;
+ const top=Math.min(...members.map(n=>n.y-dimensions(n).height/2))-48,bottom=Math.max(...members.map(n=>n.y+dimensions(n).height/2))+20;
+ return {left,top,width:right-left,height:bottom-top};
+}
+function renderGroupControls(chosen){
+ if(activeGroupId&&!data.groups.some(g=>g.id===activeGroupId))activeGroupId=null;
+ groupPicker.replaceChildren(new Option('Choose a group',''));deviceGroup.replaceChildren(new Option('Ungrouped',''));
+ for(const group of data.groups){groupPicker.add(new Option(group.name,group.id));deviceGroup.add(new Option(group.name,group.id));}
+ groupPicker.value=activeGroupId||'';deviceGroup.value=chosen?.groupId||'';
+ const active=data.groups.find(g=>g.id===activeGroupId);groupName.value=active?.name||'';groupName.disabled=!active;
+ for(const id of ['rename-group','manage-group','remove-group'])document.querySelector('#'+id).disabled=!active;
+}
+document.querySelector('#create-group-form').addEventListener('submit',e=>{
+ e.preventDefault();if(data.groups.length>=100){status.textContent='A plan can contain at most 100 groups.';return;}
+ const name=document.querySelector('#new-group-name').value.trim();if(!name)return;
+ const group={id:crypto.randomUUID(),name};data.groups.push(group);activeGroupId=group.id;
+ const node=data.nodes.find(n=>n.id===selected);if(node)node.groupId=group.id;
+ document.querySelector('#new-group-name').value='';dirty=true;render();status.textContent='Group created. Add devices and save your diagram.';
+});
+groupPicker.onchange=()=>{activeGroupId=groupPicker.value||null;render();};
+deviceGroup.onchange=()=>{const node=data.nodes.find(n=>n.id===selected);if(!node)return;if(deviceGroup.value){node.groupId=deviceGroup.value;activeGroupId=deviceGroup.value;}else delete node.groupId;dirty=true;render();status.textContent='Device group updated. Save your diagram.';};
+document.querySelector('#edit-group-form').addEventListener('submit',e=>{e.preventDefault();const group=data.groups.find(g=>g.id===activeGroupId),name=groupName.value.trim();if(!group||!name)return;group.name=name;dirty=true;render();status.textContent='Group renamed. Save your diagram.';});
+document.querySelector('#remove-group').onclick=()=>{if(!activeGroupId)return;for(const node of data.nodes)if(node.groupId===activeGroupId)delete node.groupId;data.groups=data.groups.filter(g=>g.id!==activeGroupId);activeGroupId=null;dirty=true;render();status.textContent='Group removed. Devices and connections kept. Save your diagram.';};
+document.querySelector('#manage-group').onclick=()=>{
+ const group=data.groups.find(g=>g.id===activeGroupId);if(!group)return;editingGroupId=group.id;
+ document.querySelector('#group-dialog-title').textContent='Devices in '+group.name;
+ const list=document.querySelector('#group-members');list.replaceChildren();
+ if(!data.nodes.length){const p=document.createElement('p');p.textContent='Add devices to the canvas first.';list.append(p);}
+ for(const node of data.nodes){const label=document.createElement('label'),input=document.createElement('input'),span=document.createElement('span');input.type='checkbox';input.name='members';input.value=node.id;input.checked=node.groupId===group.id;const current=data.groups.find(g=>g.id===node.groupId);span.textContent=node.label+(current&&current.id!==group.id?' — currently in '+current.name:'');label.append(input,span);list.append(label);}
+ membersDialog.showModal();
+};
+membersForm.addEventListener('submit',e=>{e.preventDefault();if(!data.groups.some(g=>g.id===editingGroupId))return;const members=new Set(new FormData(membersForm).getAll('members'));for(const node of data.nodes){if(members.has(node.id))node.groupId=editingGroupId;else if(node.groupId===editingGroupId)delete node.groupId;}dirty=true;membersDialog.close();render();status.textContent='Group devices updated. Save your diagram.';});
+document.querySelector('#cancel-group-members').onclick=()=>membersDialog.close();
+membersDialog.addEventListener('close',()=>{editingGroupId=null;});
+
 function boundary(node,towards){const {width,height}=dimensions(node),dx=towards.x-node.x,dy=towards.y-node.y;const scale=Math.max(Math.abs(dx)/(width/2),Math.abs(dy)/(height/2));const ratio=scale?Math.min(0.45,1/scale):0;return {x:node.x+dx*ratio,y:node.y+dy*ratio};}
 function el(type,attrs){const e=document.createElementNS(ns,type);for(const [k,v]of Object.entries(attrs))e.setAttribute(k,v);return e;}
 function portLabel(a,b,ratio,label){
@@ -49,12 +94,20 @@ function portLabel(a,b,ratio,label){
  t.textContent=label.length>28?label.slice(0,27)+'…':label;return t;
 }
 function render(){
- const chosen=data.nodes.find(n=>n.id===selected);sizeForm.hidden=!chosen;if(chosen){const size=dimensions(chosen);widthInput.value=size.width;heightInput.value=size.height;}
+ const chosen=data.nodes.find(n=>n.id===selected);renderGroupControls(chosen);sizeForm.hidden=!chosen;if(chosen){const size=dimensions(chosen);widthInput.value=size.width;heightInput.value=size.height;}
  svg.replaceChildren();
  const defs=el('defs',{}),pattern=el('pattern',{id:'canvas-dots',width:20,height:20,patternUnits:'userSpaceOnUse'});
  pattern.append(el('circle',{cx:1,cy:1,r:1,fill:'#bfcfc3'}));defs.append(pattern);svg.append(defs);
  svg.append(el('rect',{x:0,y:0,width:1200,height:800,fill:'url(#canvas-dots)'}));
  if(background.value)svg.append(el('image',{x:0,y:0,width:1200,height:800,href:`/uploads/${background.value}`,preserveAspectRatio:'xMidYMid meet','pointer-events':'none'}));
+ for(const group of data.groups){
+  const bounds=groupBounds(group);if(!bounds)continue;
+  const {left,top,width,height}=bounds,g=el('g',{'data-cabinet-id':group.id});
+  const title=el('title',{});title.textContent=group.name;g.append(title);
+  g.append(el('rect',{x:left,y:top,width,height,rx:10,fill:'#C4E9AD','fill-opacity':0.14,stroke:group.id===activeGroupId?'#153E35':'#7c998c','stroke-dasharray':'8 5','pointer-events':'none'}));
+  g.append(el('rect',{'data-group-handle':group.id,x:left,y:top,width,height:28,rx:5,fill:'#153E35',tabindex:0,role:'button','aria-label':'Move group '+group.name}));
+  const label=el('text',{x:left+10,y:top+19,fill:'#fff','font-size':13});const limit=Math.max(5,Math.floor((width-20)/7));label.textContent=group.name.length>limit?group.name.slice(0,limit-1)+'…':group.name;g.append(label);svg.append(g);
+ }
  data.edges.forEach((edge,index)=>{
   const a=data.nodes.find(n=>n.id===edge.from),b=data.nodes.find(n=>n.id===edge.to);if(!a||!b)return;
   const g=el('g',{'data-edge-index':index,tabindex:0,role:'button','aria-label':`${a.label} master port ${edge.masterPort||'unspecified'} to ${b.label} slave port ${edge.slavePort||'unspecified'}. Edit connection ports.`});
@@ -99,7 +152,7 @@ document.querySelector('#port-cancel').onclick=()=>{cancelledPorts();dialog.clos
 dialog.addEventListener('cancel',cancelledPorts);
 dialog.addEventListener('close',()=>{pending=null;source=null;});
 function chooseDevice(id){
- selected=id;
+ selected=id;const selectedNode=data.nodes.find(n=>n.id===id);if(selectedNode?.groupId)activeGroupId=selectedNode.groupId;
  if(connecting){
   if(source&&source!==id){const from=source;const legacyIndex=data.edges.findIndex(e=>e.from===from&&e.to===id&&!e.masterPort&&!e.slavePort);openPorts(from,id,legacyIndex<0?null:legacyIndex);}
   else{source=id;status.textContent='Master selected. Select the slave device.';}
@@ -109,11 +162,17 @@ function chooseDevice(id){
 function point(e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
 svg.addEventListener('pointerdown',e=>{
  if(!e.isPrimary||e.button!==0||activePointer!==null)return;
- const edge=e.target.closest('[data-edge-index]'),g=e.target.closest('[data-id]');
- if(panMode||(!edge&&!g)){
+ const edge=e.target.closest('[data-edge-index]'),g=e.target.closest('[data-id]'),cabinet=e.target.closest('[data-group-handle]');
+ if(panMode||(!edge&&!g&&!cabinet)){
   e.preventDefault();const rect=svg.getBoundingClientRect();
   pan={clientX:e.clientX,clientY:e.clientY,x:view.x,y:view.y,scaleX:view.width/rect.width,scaleY:view.height/rect.height};
   activePointer=e.pointerId;svg.classList.add('is-panning');svg.setPointerCapture(e.pointerId);return;
+ }
+ if(cabinet){
+  activeGroupId=cabinet.dataset.groupHandle;selected=null;
+  if(connecting){render();status.textContent='Finish connecting before moving a group.';return;}
+  const members=data.nodes.filter(n=>n.groupId===activeGroupId).map(n=>({node:n,x:n.x,y:n.y}));if(!members.length)return;
+  e.preventDefault();const p=point(e);groupDrag={members,x:p.x,y:p.y};activePointer=e.pointerId;svg.setPointerCapture(e.pointerId);render();return;
  }
  const handle=e.target.closest('[data-resize]');
  if(handle&&!connecting){e.preventDefault();const n=data.nodes.find(n=>n.id===handle.dataset.resize),p=point(e);resize={n,startX:p.x,startY:p.y,...dimensions(n)};activePointer=e.pointerId;svg.setPointerCapture(e.pointerId);return;}
@@ -121,14 +180,15 @@ svg.addEventListener('pointerdown',e=>{
  const id=g.dataset.id;chooseDevice(id);
  if(!connecting){e.preventDefault();const n=data.nodes.find(n=>n.id===id),p=point(e);drag={n,dx:p.x-n.x,dy:p.y-n.y};activePointer=e.pointerId;svg.setPointerCapture(e.pointerId);}
 });
-svg.addEventListener('keydown',e=>{if(!['Enter',' '].includes(e.key))return;if(e.target.closest('[data-resize]')){e.preventDefault();widthInput.focus();return;}const edge=e.target.closest('[data-edge-index]'),node=e.target.closest('[data-id]');if(!edge&&!node)return;e.preventDefault();if(edge){const index=Number(edge.dataset.edgeIndex),connection=data.edges[index];openPorts(connection.from,connection.to,index);}else chooseDevice(node.dataset.id);});
+svg.addEventListener('keydown',e=>{if(!['Enter',' '].includes(e.key))return;const groupHandle=e.target.closest('[data-group-handle]');if(groupHandle){e.preventDefault();activeGroupId=groupHandle.dataset.groupHandle;render();groupPicker.focus();return;}if(e.target.closest('[data-resize]')){e.preventDefault();widthInput.focus();return;}const edge=e.target.closest('[data-edge-index]'),node=e.target.closest('[data-id]');if(!edge&&!node)return;e.preventDefault();if(edge){const index=Number(edge.dataset.edgeIndex),connection=data.edges[index];openPorts(connection.from,connection.to,index);}else chooseDevice(node.dataset.id);});
 svg.addEventListener('pointermove',e=>{
  if(e.pointerId!==activePointer)return;
  if(pan){e.preventDefault();view.x=pan.x-(e.clientX-pan.clientX)*pan.scaleX;view.y=pan.y-(e.clientY-pan.clientY)*pan.scaleY;applyView();return;}
+ if(groupDrag){const p=point(e),members=groupDrag.members;const minX=Math.max(...members.map(m=>dimensions(m.node).width/2-m.x)),maxX=Math.min(...members.map(m=>1200-dimensions(m.node).width/2-m.x)),minY=Math.max(...members.map(m=>dimensions(m.node).height/2-m.y)),maxY=Math.min(...members.map(m=>800-dimensions(m.node).height/2-m.y));const dx=Math.max(minX,Math.min(maxX,p.x-groupDrag.x)),dy=Math.max(minY,Math.min(maxY,p.y-groupDrag.y));for(const m of members){m.node.x=m.x+dx;m.node.y=m.y+dy;}dirty=true;render();return;}
  if(resize){const p=point(e);resizeDevice(resize.n,resize.width+2*(p.x-resize.startX),resize.height+2*(p.y-resize.startY));return;}
  if(!drag)return;const p=point(e),size=dimensions(drag.n);drag.n.x=Math.max(size.width/2,Math.min(1200-size.width/2,p.x-drag.dx));drag.n.y=Math.max(size.height/2,Math.min(800-size.height/2,p.y-drag.dy));dirty=true;render();
 });
-function endGesture(e){if(e.pointerId!==activePointer)return;drag=null;pan=null;resize=null;activePointer=null;svg.classList.remove('is-panning');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId);}
+function endGesture(e){if(e.pointerId!==activePointer)return;drag=null;pan=null;resize=null;groupDrag=null;activePointer=null;svg.classList.remove('is-panning');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId);}
 svg.addEventListener('pointerup',endGesture);svg.addEventListener('pointercancel',endGesture);svg.addEventListener('lostpointercapture',endGesture);
 document.querySelector('#add').onclick=()=>{if(data.nodes.length>=300)return;const id=crypto.randomUUID();data.nodes.push({id,label:document.querySelector('#label').value.trim()||'Device',type:document.querySelector('#type').value,x:Math.max(65,Math.min(1135,view.x+view.width/2)),y:Math.max(27,Math.min(773,view.y+view.height/2))});selected=id;dirty=true;render();};
 document.querySelector('#connect').onclick=e=>{setPanMode(false);connecting=!connecting;source=null;e.target.textContent=connecting?'Finish connecting':'Connect devices';status.textContent=connecting?'Select the master device, then the slave device.':'Drag devices to position them. Click a connection to edit ports.';render();};
