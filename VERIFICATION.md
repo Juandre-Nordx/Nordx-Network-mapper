@@ -30,3 +30,7 @@ Still required: authenticated Railway deployment, public HTTPS/domain checks, ac
 - Verified the schema upgrade preserves legacy users and password hashes and adds account status/session-version defaults.
 - Verified the stdin-based `create-super-admin` command promotes an existing account and hashes its new password against PostgreSQL.
 - Syntax validation and diff whitespace checks passed. No production account has been created from this environment; the deployment operator must run the secure creation command in the Railway web service.
+
+## Production diagnostics — 2026-11-01
+
+Seven tests passed with the real PostgreSQL startup test enabled. Verified generated request IDs, correlated server error logs, safe browser references, release identifiers, unhealthy-schema logs, and exclusion of query strings and session cookies from structured request records. Production error responses do not expose database error text. Schema readiness now validates user status/session-version columns. Production failure remains unconfirmed pending the deployed health/login responses or runtime error details.

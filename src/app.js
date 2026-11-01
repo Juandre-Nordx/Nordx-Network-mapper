@@ -17,17 +17,24 @@ const text=z.string().trim().min(1).max(200);
 const optional=z.string().trim().max(2000).default('');
 const diagramSchema=z.object({backgroundUploadId:z.number().int().positive().nullable().optional(),nodes:z.array(z.object({id:z.string().max(80),label:text,type:text,x:z.number().min(0).max(1200),y:z.number().min(0).max(800)})).max(300),edges:z.array(z.object({from:z.string().max(80),to:z.string().max(80)})).max(600)}).superRefine((d,ctx)=>{const ids=new Set(d.nodes.map(n=>n.id));if(ids.size!==d.nodes.length || d.edges.some(e=>!ids.has(e.from)||!ids.has(e.to)))ctx.addIssue({code:'custom',message:'Invalid diagram references'});});
 export const templates={blank:{nodes:[],edges:[]},office:{nodes:[{id:'router',label:'Gateway',type:'router',x:150,y:100},{id:'switch',label:'Core switch',type:'switch',x:450,y:100},{id:'ap',label:'Wireless AP',type:'wifi',x:750,y:250}],edges:[{from:'router',to:'switch'},{from:'switch',to:'ap'}]},cctv:{nodes:[{id:'nvr',label:'NVR',type:'nvr',x:450,y:100},{id:'cam1',label:'Entrance camera',type:'camera',x:200,y:350},{id:'cam2',label:'Parking camera',type:'camera',x:750,y:350}],edges:[{from:'nvr',to:'cam1'},{from:'nvr',to:'cam2'}]}};
-export function createApp({db,sessionStore,uploadDir=process.env.UPLOAD_DIR||path.join(root,'var/uploads'),production=process.env.NODE_ENV==='production',sessionSecret=process.env.SESSION_SECRET}) {
+export function createApp({db,sessionStore,uploadDir=process.env.UPLOAD_DIR||path.join(root,'var/uploads'),production=process.env.NODE_ENV==='production',sessionSecret=process.env.SESSION_SECRET,logger=console,release=process.env.RAILWAY_GIT_COMMIT_SHA}) {
  if(!sessionSecret || sessionSecret.length<32) throw new Error('SESSION_SECRET must contain at least 32 characters.');
  const app=express();
+ const releaseId=/^[a-f0-9]{7,40}$/i.test(release||'')?release.slice(0,12):'unknown';
+ app.use((req,res,next)=>{
+  req.requestId=randomUUID();res.set('X-Request-ID',req.requestId);
+  const started=performance.now();
+  res.on('finish',()=>{if(production||res.statusCode>=500)logger.info(JSON.stringify({level:'info',event:'http_request',requestId:req.requestId,method:req.method,path:req.path,status:res.statusCode,durationMs:Math.round(performance.now()-started),release:releaseId}));});
+  next();
+ });
  app.disable('x-powered-by');
  if(production) app.set('trust proxy',1);
  app.set('views',path.join(root,'views'));app.set('view engine','ejs');
  app.use(helmet({contentSecurityPolicy:{directives:{'upgrade-insecure-requests':production?[]:null,'img-src':["'self'","data:"],'script-src':["'self'"],'style-src':["'self'","'unsafe-inline'"]}}}));
  app.use(express.static(path.join(root,'public')));
- app.get('/health',async(req,res)=>{try{await verifySchema(db);res.json({status:'ok'});}catch{res.status(503).json({status:'unavailable'});}});
+ app.get('/health',async(req,res)=>{try{await verifySchema(db);res.json({status:'ok',release:releaseId});}catch(error){logger.error(JSON.stringify({level:'error',event:'health_check_failed',requestId:req.requestId,code:error.code,message:error.message}));res.status(503).json({status:'unavailable',release:releaseId,requestId:req.requestId});}});
  const Store=pgSession(session);
- app.use(session({store:sessionStore||new Store({pool:db,tableName:'sessions'}),secret:sessionSecret,resave:false,saveUninitialized:false,name:'nordx.sid',cookie:{httpOnly:true,secure:production,sameSite:'lax',maxAge:8*60*60*1000}}));
+ app.use(session({store:sessionStore||new Store({pool:db,tableName:'sessions',errorLog:error=>logger.error(JSON.stringify({level:'error',event:'session_store_error',code:error?.code,message:error?.message||'Session store operation failed'}))}),secret:sessionSecret,resave:false,saveUninitialized:false,name:'nordx.sid',cookie:{httpOnly:true,secure:production,sameSite:'lax',maxAge:8*60*60*1000}}));
  app.use(express.urlencoded({extended:false,limit:'100kb'}));app.use(express.json({limit:'250kb'}));
  app.use(async(req,res,next)=>{try{res.locals.user=null;if(req.session.userId){const r=await db.query('SELECT id,name,email,role,auth_version FROM users WHERE id=$1 AND is_active=TRUE',[req.session.userId]);res.locals.user=r.rows[0]&&r.rows[0].auth_version===(req.session.authVersion??0)?r.rows[0]:null;}req.user=res.locals.user;req.session.csrf ||= randomBytes(32).toString('hex');res.locals.csrf=req.session.csrf;res.locals.title='Nordx Network Mapper';next();}catch(e){next(e);}});
  app.use((req,res,next)=>{if(['GET','HEAD','OPTIONS'].includes(req.method))return next();const token=req.get('x-csrf-token')||req.body?._csrf;const expected=req.session.csrf;if(typeof token!=='string'||Buffer.byteLength(token)!==Buffer.byteLength(expected)||!timingSafeEqual(Buffer.from(token),Buffer.from(expected)))return res.status(403).send('Invalid request token. Reload the page.');next();});
@@ -75,6 +82,6 @@ export function createApp({db,sessionStore,uploadDir=process.env.UPLOAD_DIR||pat
   }catch(error){await client.query('ROLLBACK');throw error;}finally{if(client.release)client.release();}
  });
  app.use((req,res)=>res.status(404).send('Page not found.'));
- app.use((err,req,res,next)=>{if(res.headersSent)return next(err);if(err instanceof z.ZodError)return res.status(400).send('Invalid input. Check required fields and field lengths.');if(err.code==='23505')return res.status(409).send('This record already exists.');if(err instanceof multer.MulterError)return res.status(400).send('Upload failed. Maximum size is 10 MB.');console.error(JSON.stringify({level:'error',message:err.message}));res.status(500).send('The request could not be completed.');});
+ app.use((err,req,res,next)=>{if(res.headersSent)return next(err);if(err instanceof z.ZodError)return res.status(400).send('Invalid input. Check required fields and field lengths.');if(err.code==='23505')return res.status(409).send('This record already exists.');if(err instanceof multer.MulterError)return res.status(400).send('Upload failed. Maximum size is 10 MB.');logger.error(JSON.stringify({level:'error',event:'request_failed',requestId:req.requestId,method:req.method,path:req.path,code:err.code,message:err.message}));res.set('Cache-Control','no-store');res.status(500).type('text').send(`The request could not be completed.\nReference: ${req.requestId}\nPlease provide this reference to your administrator.`);});
  return app;
 }

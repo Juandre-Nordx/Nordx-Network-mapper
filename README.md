@@ -98,3 +98,9 @@ unset owner_password
 ```
 
 Use your actual email and name. This command creates the account or promotes the matching existing email, replaces its password, enables it, and revokes its previous sessions. It applies the safe schema migration first. Use the web service's existing `DATABASE_URL`; do not paste production credentials or passwords into chat. Sign in with that email and password, then open **Team**. No built-in super-admin password is created. Ordinary administrators retain account-creation access for administrators and technicians; they cannot modify existing users or grant super-admin privileges.
+
+### Finding production errors in Railway
+
+Select the **web application service**, open **Deployments**, select the active deployment, and open its runtime/deploy logs (not build logs). Clear search filters and select the latest time range, then refresh the application. In production, each completed request emits an `http_request` record with status, request ID, path (without query parameters), timing, and release. Failed requests additionally emit `request_failed`; database readiness failures emit `health_check_failed`. Session-store background failures emit `session_store_error`.
+
+The browser's error reference matches `requestId` in the runtime log. Internal error details remain out of the browser. `/health` reports `status` and a shortened Railway Git commit SHA as `release` when Railway supplies it; otherwise release is `unknown`. HTTP 503 indicates a database or schema-readiness failure. If `/health` succeeds but the dashboard fails, compare `/login` in a private window and collect the failing dashboard's reference ID. Do not enable debug mode or share secrets. If no request logs appear after deploying this diagnostic version, verify the selected service, active deployment/commit, log filters, and public domain association.

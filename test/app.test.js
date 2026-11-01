@@ -112,3 +112,19 @@ test('super-admin schema upgrade preserves existing administrator accounts',asyn
  const row=(await db.query('SELECT * FROM users WHERE id=1')).rows[0];assert.equal(row.name,'Existing user');assert.equal(row.password_hash,'existing-hash');assert.equal(row.is_active,true);assert.equal(row.auth_version,0);
  await db.query("UPDATE users SET role='superadmin' WHERE id=1");assert.equal((await db.query('SELECT role FROM users WHERE id=1')).rows[0].role,'superadmin');
 });
+
+test('production diagnostics correlate failed requests without exposing database details',async()=>{
+ const logs=[];const logger={info:line=>logs.push(JSON.parse(line)),error:line=>logs.push(JSON.parse(line))};
+ const error=Object.assign(new Error('column auth_version does not exist'),{code:'42703'});
+ const store=new session.MemoryStore();
+ const app=createApp({db:{query:async()=>{throw error;}},sessionStore:store,sessionSecret:'t'.repeat(64),production:true,logger,release:'abcdef1234567890'});
+ const health=await request(app).get('/health');assert.equal(health.status,503);assert.equal(health.body.release,'abcdef123456');assert.equal(health.body.requestId,health.headers['x-request-id']);assert.equal(logs.find(l=>l.event==='health_check_failed').code,'42703');assert.doesNotMatch(health.text,/auth_version/);
+ // Valid session with a user ID triggers a failing database lookup.
+ await new Promise((resolve,reject)=>store.set('diagnostic-session',{cookie:{expires:new Date(Date.now()+60000)},userId:123},e=>e?reject(e):resolve()));
+ const {default:signature}=await import('cookie-signature');
+ const cookie='nordx.sid='+encodeURIComponent('s:'+signature.sign('diagnostic-session','t'.repeat(64)));
+ const r=await request(app).get('/?private=value').set('X-Forwarded-Proto','https').set('Cookie',cookie).set('X-Request-ID','untrusted-request-id');
+ assert.equal(r.status,500);assert.match(r.text,/Reference:/);assert.ok(r.text.includes(r.headers['x-request-id']));assert.notEqual(r.headers['x-request-id'],'untrusted-request-id');assert.doesNotMatch(r.text,/auth_version|42703/);
+ const failure=logs.find(l=>l.event==='request_failed');assert.equal(failure.requestId,r.headers['x-request-id']);assert.equal(failure.code,'42703');assert.equal(failure.path,'/');assert.doesNotMatch(JSON.stringify(logs),/private=value|diagnostic-session/);
+ assert.ok(logs.some(l=>l.event==='http_request'&&l.status===500));
+});

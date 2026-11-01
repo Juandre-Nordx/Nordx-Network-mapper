@@ -15,7 +15,7 @@ export async function migrate(db) {
  } catch(e) {await client.query('ROLLBACK'); throw e;} finally {if(client.release) client.release();}
 }
 
-export const schemaReadinessSql = 'SELECT 1 FROM users, clients, client_access, sites, plans, equipment, uploads, sessions LIMIT 0';
+export const schemaReadinessSql = 'SELECT users.is_active, users.auth_version FROM users, clients, client_access, sites, plans, equipment, uploads, sessions LIMIT 0';
 export async function verifySchema(db) {
  await db.query(schemaReadinessSql);
 }

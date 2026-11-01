@@ -9,6 +9,7 @@ try {
  console.log('Database schema ready.');
 } catch(error) {
  await db.end();
+ console.error(JSON.stringify({level:'error',event:'database_initialization_failed',code:error.code,message:error.message}));
  throw error;
 }
 const server=createApp({db}).listen(Number(process.env.PORT||3000),'0.0.0.0',()=>console.log(`Nordx Network Mapper listening on port ${server.address().port}`));
