@@ -12,7 +12,8 @@
     "migrate": "node scripts/migrate.js",
     "create-admin": "node scripts/create-admin.js",
     "test": "node --test",
-    "build": "node --check src/app.js && node --check public/editor.js"
+    "build": "node --check src/app.js && node --check public/editor.js",
+    "create-super-admin": "node scripts/create-super-admin.js"
   },
   "repository": {
     "type": "git",

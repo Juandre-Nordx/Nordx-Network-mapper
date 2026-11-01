@@ -1,1 +1,15 @@
-<%- include('header') %><p class="eyebrow">ADMINISTRATION</p><h1>Your team</h1><div class="grid"><section class="card"><h2>Members</h2><% users.forEach(u=>{ %><div class="item"><h3><%= u.name %> <span class="badge"><%= u.role %></span></h3><p><%= u.email %></p></div><% }) %></section><form class="card stack" method="post" action="/users"><input type="hidden" name="_csrf" value="<%= csrf %>"><h2>Create member</h2><label>Name<input name="name" required maxlength="200"></label><label>Email<input type="email" name="email" required maxlength="200"></label><label>Initial password<input type="password" name="password" required minlength="12" maxlength="128" autocomplete="new-password"></label><label>Role<select name="role"><option value="technician">Technician</option><option value="admin">Administrator</option></select></label><button>Create member</button><small>Assign technicians to clients from the client page. Share initial passwords through a secure channel.</small></form></div><%- include('footer') %>
+<%- include('header') %>
+<p class="eyebrow">ACCOUNT ADMINISTRATION</p><h1>Your team</h1>
+<% if(user.role==='superadmin'){ %><p>Manage every other account. Changes revoke the account's existing sessions. Disabling an account preserves its records.</p><% } %>
+<div class="grid"><section>
+<% users.forEach(u=>{ %><article class="card"><h2><%= u.name %> <span class="badge"><%= u.role %></span></h2><p><%= u.email %> · <%= u.is_active?'Active':'Disabled' %></p>
+<% if(user.role==='superadmin' && u.id!==user.id){ %>
+<form class="stack" method="post" action="/users/<%= u.id %>/manage">
+<input type="hidden" name="_csrf" value="<%= csrf %>">
+<label>Name<input name="name" value="<%= u.name %>" required maxlength="200"></label>
+<label>Email<input name="email" type="email" value="<%= u.email %>" required maxlength="200"></label>
+<label>Role<select name="role"><% ['technician','admin','superadmin'].forEach(role=>{ %><option value="<%= role %>" <%= u.role===role?'selected':'' %>><%= role %></option><% }) %></select></label>
+<label>Account status<select name="active"><option value="yes" <%= u.is_active?'selected':'' %>>Active</option><option value="no" <%= !u.is_active?'selected':'' %>>Disabled</option></select></label>
+<label>New password (leave blank to keep current)<input name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password"></label><button>Save account changes</button>
+</form><% } else if(u.id===user.id){ %><small>Your account</small><% } %></article><% }) %>
+</section><form class="card stack" method="post" action="/users"><input type="hidden" name="_csrf" value="<%= csrf %>"><h2>Create member</h2><label>Name<input name="name" required maxlength="200"></label><label>Email<input type="email" name="email" required maxlength="200"></label><label>Initial password<input type="password" name="password" required minlength="12" maxlength="128" autocomplete="new-password"></label><label>Role<select name="role"><option value="technician">Technician</option><option value="admin">Administrator</option><% if(user.role==='superadmin'){ %><option value="superadmin">Super administrator</option><% } %></select></label><button>Create member</button><small>Assign technicians to clients from the client page. Share initial passwords through a secure channel.</small></form></div><%- include('footer') %>
