@@ -36,3 +36,9 @@ Still required: authenticated Railway deployment, public HTTPS/domain checks, ac
 - Six automated tests passed with the PostgreSQL startup workflow enabled. Diagram API coverage verifies master/slave port persistence, rejection of overlong or incomplete port pairs, and support for legacy connections without port metadata.
 - Chromium against a private PostgreSQL schema verified the master/slave dialog, cancellation without mutation, canvas labels, saving/reopening, editing an existing link, and rejecting duplicate endpoint/port pairs. The exported PDF was downloaded and checked with `pdftotext`; both master and slave device names and ports appeared in the connection schedule.
 - Syntax checks and diff whitespace checks passed. Existing diagrams and the database schema are preserved. Railway deployment has not been performed from this environment.
+
+## Mobile canvas panning — 2026-11-01
+
+- Mobile Chromium with a 390 × 844 touch viewport: real CDP touch swipes moved the canvas view, Reset view restored its starting position, Pan canvas allowed swiping from a device without moving that device, and normal device dragging remained available with pan mode off.
+- Saved coordinates were checked in PostgreSQL after panning and remained unchanged. Existing desktop connection-port creation, editing, persistence, duplicate prevention, and PDF download also passed in the browser.
+- JavaScript syntax and whitespace checks passed. This validates emulated touch interaction; physical iPhone/Android testing and Railway deployment remain outstanding.
