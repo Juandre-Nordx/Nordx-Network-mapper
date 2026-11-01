@@ -1,7 +1,7 @@
 const svg=document.querySelector('#diagram');
 const data=JSON.parse(document.querySelector('#initial-diagram').textContent);
 const ns='http://www.w3.org/2000/svg';
-let selected=null,connecting=false,source=null,drag=null,dirty=false,pending=null,pan=null,panMode=false,activePointer=null;
+let selected=null,connecting=false,source=null,drag=null,dirty=false,pending=null,pan=null,panMode=false,activePointer=null,resize=null;
 const view={x:0,y:0,width:1200,height:800};
 const panButton=document.querySelector('#pan-canvas');
 let viewInitialized=false;
@@ -21,7 +21,7 @@ function sizeView(reset=false){
  viewInitialized=true;applyView();
 }
 function setPanMode(enabled){panMode=enabled;panButton.setAttribute('aria-pressed',String(enabled));svg.classList.toggle('pan-mode',enabled);}
-panButton.onclick=()=>{setPanMode(!panMode);if(panMode){connecting=false;source=null;document.querySelector('#connect').textContent='Connect devices';}status.textContent=panMode?'Drag anywhere on the canvas to move around.':'Drag empty space to move around, or drag a device to reposition it.';};
+panButton.onclick=()=>{setPanMode(!panMode);if(panMode){connecting=false;source=null;document.querySelector('#connect').textContent='Connect devices';}status.textContent=panMode?'Drag anywhere on the canvas to move around.':'Drag empty space to move around, or drag a device to reposition it.';render();};
 document.querySelector('#reset-view').onclick=()=>sizeView(true);
 new ResizeObserver(()=>sizeView()).observe(svg);
 
@@ -31,6 +31,16 @@ const portForm=document.querySelector('#port-form');
 const masterInput=document.querySelector('#master-port');
 const slaveInput=document.querySelector('#slave-port');
 const portError=document.querySelector('#port-error');
+const sizeForm=document.querySelector('#device-size-form');
+const widthInput=document.querySelector('#device-width'),heightInput=document.querySelector('#device-height');
+function dimensions(node){return {width:node.width??130,height:node.height??54};}
+function resizeDevice(node,width,height){
+ node.width=Math.round(Math.max(80,Math.min(360,width)));node.height=Math.round(Math.max(48,Math.min(240,height)));
+ node.x=Math.max(node.width/2,Math.min(1200-node.width/2,node.x));node.y=Math.max(node.height/2,Math.min(800-node.height/2,node.y));
+ dirty=true;render();
+}
+sizeForm.addEventListener('submit',e=>{e.preventDefault();const node=data.nodes.find(n=>n.id===selected);if(!node||!sizeForm.reportValidity())return;resizeDevice(node,Number(widthInput.value),Number(heightInput.value));status.textContent='Device size updated. Save your diagram.';});
+function boundary(node,towards){const {width,height}=dimensions(node),dx=towards.x-node.x,dy=towards.y-node.y;const scale=Math.max(Math.abs(dx)/(width/2),Math.abs(dy)/(height/2));const ratio=scale?Math.min(0.45,1/scale):0;return {x:node.x+dx*ratio,y:node.y+dy*ratio};}
 function el(type,attrs){const e=document.createElementNS(ns,type);for(const [k,v]of Object.entries(attrs))e.setAttribute(k,v);return e;}
 function portLabel(a,b,ratio,label){
  const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy)||1;
@@ -39,6 +49,7 @@ function portLabel(a,b,ratio,label){
  t.textContent=label.length>28?label.slice(0,27)+'…':label;return t;
 }
 function render(){
+ const chosen=data.nodes.find(n=>n.id===selected);sizeForm.hidden=!chosen;if(chosen){const size=dimensions(chosen);widthInput.value=size.width;heightInput.value=size.height;}
  svg.replaceChildren();
  const defs=el('defs',{}),pattern=el('pattern',{id:'canvas-dots',width:20,height:20,patternUnits:'userSpaceOnUse'});
  pattern.append(el('circle',{cx:1,cy:1,r:1,fill:'#bfcfc3'}));defs.append(pattern);svg.append(defs);
@@ -50,15 +61,19 @@ function render(){
   const title=el('title',{});title.textContent=g.getAttribute('aria-label');g.append(title);
   g.append(el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'transparent','stroke-width':18}));
   g.append(el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#8da69a','stroke-width':3}));
-  if(edge.masterPort)g.append(portLabel(a,b,0.28,'M: '+edge.masterPort));
-  if(edge.slavePort)g.append(portLabel(a,b,0.72,'S: '+edge.slavePort));
+  const start=boundary(a,b),end=boundary(b,a);
+  if(edge.masterPort)g.append(portLabel(start,end,0.28,'M: '+edge.masterPort));
+  if(edge.slavePort)g.append(portLabel(start,end,0.72,'S: '+edge.slavePort));
   svg.append(g);
  });
  for(const n of data.nodes){
   const g=el('g',{'data-id':n.id,transform:`translate(${n.x},${n.y})`,tabindex:0,role:'button','aria-label':n.label});
-  g.append(el('rect',{x:-65,y:-27,width:130,height:54,rx:9,fill:n.id===selected?'#C4E9AD':'#fff',stroke:'#153E35','stroke-width':2}));
-  const t=el('text',{'text-anchor':'middle',y:-2,fill:'#153E35','font-size':14});t.textContent=n.label.length>18?n.label.slice(0,17)+'…':n.label;
-  const s=el('text',{'text-anchor':'middle',y:17,fill:'#537267','font-size':11});s.textContent=n.type;g.append(t,s);svg.append(g);
+  const {width,height}=dimensions(n);
+  g.append(el('rect',{x:-width/2,y:-height/2,width,height,rx:9,fill:n.id===selected?'#C4E9AD':'#fff',stroke:'#153E35','stroke-width':2}));
+  const t=el('text',{'text-anchor':'middle',y:-2,fill:'#153E35','font-size':14});const maxChars=Math.max(5,Math.floor((width-16)/7));t.textContent=n.label.length>maxChars?n.label.slice(0,maxChars-1)+'…':n.label;
+  const s=el('text',{'text-anchor':'middle',y:17,fill:'#537267','font-size':11});s.textContent=n.type==='voip'?'VoIP phone':n.type;g.append(t,s);
+  if(n.id===selected&&!connecting&&!panMode)g.append(el('rect',{'data-resize':n.id,x:width/2-14,y:height/2-14,width:28,height:28,rx:5,fill:'#153E35',stroke:'#fff','stroke-width':2,tabindex:0,role:'button','aria-label':'Resize '+n.label}));
+  svg.append(g);
  }
 }
 function openPorts(from,to,index=null){
@@ -100,20 +115,23 @@ svg.addEventListener('pointerdown',e=>{
   pan={clientX:e.clientX,clientY:e.clientY,x:view.x,y:view.y,scaleX:view.width/rect.width,scaleY:view.height/rect.height};
   activePointer=e.pointerId;svg.classList.add('is-panning');svg.setPointerCapture(e.pointerId);return;
  }
+ const handle=e.target.closest('[data-resize]');
+ if(handle&&!connecting){e.preventDefault();const n=data.nodes.find(n=>n.id===handle.dataset.resize),p=point(e);resize={n,startX:p.x,startY:p.y,...dimensions(n)};activePointer=e.pointerId;svg.setPointerCapture(e.pointerId);return;}
  if(edge){const index=Number(edge.dataset.edgeIndex),connection=data.edges[index];openPorts(connection.from,connection.to,index);return;}
  const id=g.dataset.id;chooseDevice(id);
  if(!connecting){e.preventDefault();const n=data.nodes.find(n=>n.id===id),p=point(e);drag={n,dx:p.x-n.x,dy:p.y-n.y};activePointer=e.pointerId;svg.setPointerCapture(e.pointerId);}
 });
-svg.addEventListener('keydown',e=>{if(!['Enter',' '].includes(e.key))return;const edge=e.target.closest('[data-edge-index]'),node=e.target.closest('[data-id]');if(!edge&&!node)return;e.preventDefault();if(edge){const index=Number(edge.dataset.edgeIndex),connection=data.edges[index];openPorts(connection.from,connection.to,index);}else chooseDevice(node.dataset.id);});
+svg.addEventListener('keydown',e=>{if(!['Enter',' '].includes(e.key))return;if(e.target.closest('[data-resize]')){e.preventDefault();widthInput.focus();return;}const edge=e.target.closest('[data-edge-index]'),node=e.target.closest('[data-id]');if(!edge&&!node)return;e.preventDefault();if(edge){const index=Number(edge.dataset.edgeIndex),connection=data.edges[index];openPorts(connection.from,connection.to,index);}else chooseDevice(node.dataset.id);});
 svg.addEventListener('pointermove',e=>{
  if(e.pointerId!==activePointer)return;
  if(pan){e.preventDefault();view.x=pan.x-(e.clientX-pan.clientX)*pan.scaleX;view.y=pan.y-(e.clientY-pan.clientY)*pan.scaleY;applyView();return;}
- if(!drag)return;const p=point(e);drag.n.x=Math.max(65,Math.min(1135,p.x-drag.dx));drag.n.y=Math.max(30,Math.min(770,p.y-drag.dy));dirty=true;render();
+ if(resize){const p=point(e);resizeDevice(resize.n,resize.width+2*(p.x-resize.startX),resize.height+2*(p.y-resize.startY));return;}
+ if(!drag)return;const p=point(e),size=dimensions(drag.n);drag.n.x=Math.max(size.width/2,Math.min(1200-size.width/2,p.x-drag.dx));drag.n.y=Math.max(size.height/2,Math.min(800-size.height/2,p.y-drag.dy));dirty=true;render();
 });
-function endGesture(e){if(e.pointerId!==activePointer)return;drag=null;pan=null;activePointer=null;svg.classList.remove('is-panning');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId);}
+function endGesture(e){if(e.pointerId!==activePointer)return;drag=null;pan=null;resize=null;activePointer=null;svg.classList.remove('is-panning');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId);}
 svg.addEventListener('pointerup',endGesture);svg.addEventListener('pointercancel',endGesture);svg.addEventListener('lostpointercapture',endGesture);
-document.querySelector('#add').onclick=()=>{if(data.nodes.length>=300)return;data.nodes.push({id:crypto.randomUUID(),label:document.querySelector('#label').value.trim()||'Device',type:document.querySelector('#type').value,x:150+Math.random()*700,y:100+Math.random()*400});dirty=true;render();};
-document.querySelector('#connect').onclick=e=>{setPanMode(false);connecting=!connecting;source=null;e.target.textContent=connecting?'Finish connecting':'Connect devices';status.textContent=connecting?'Select the master device, then the slave device.':'Drag devices to position them. Click a connection to edit ports.';};
+document.querySelector('#add').onclick=()=>{if(data.nodes.length>=300)return;const id=crypto.randomUUID();data.nodes.push({id,label:document.querySelector('#label').value.trim()||'Device',type:document.querySelector('#type').value,x:Math.max(65,Math.min(1135,view.x+view.width/2)),y:Math.max(27,Math.min(773,view.y+view.height/2))});selected=id;dirty=true;render();};
+document.querySelector('#connect').onclick=e=>{setPanMode(false);connecting=!connecting;source=null;e.target.textContent=connecting?'Finish connecting':'Connect devices';status.textContent=connecting?'Select the master device, then the slave device.':'Drag devices to position them. Click a connection to edit ports.';render();};
 document.querySelector('#remove').onclick=()=>{data.nodes=data.nodes.filter(n=>n.id!==selected);data.edges=data.edges.filter(e=>e.from!==selected&&e.to!==selected);selected=null;source=null;dirty=true;render();};
 document.querySelector('#save').onclick=async()=>{status.textContent='Saving…';try{const r=await fetch(`/plans/${svg.dataset.planId}/diagram`,{method:'POST',headers:{'content-type':'application/json','x-csrf-token':document.querySelector('meta[name="csrf-token"]').content},body:JSON.stringify(data)});if(!r.ok||r.redirected||!(r.headers.get('content-type')||'').includes('application/json'))throw Error();dirty=false;status.textContent='Diagram saved.';}catch{status.textContent='Save failed. Check your connection and sign-in status.';}};
 const background=document.querySelector('#background');
