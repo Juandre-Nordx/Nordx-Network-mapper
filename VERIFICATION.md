@@ -49,3 +49,10 @@ Still required: authenticated Railway deployment, public HTTPS/domain checks, ac
 - Container validation used a new volume deliberately owned by root with mode 0700. Startup prepared its upload directory and dropped the application process to UID/GID 1000. HTTPS-forwarded login, PNG upload, authenticated download, and file/session persistence after container restart all passed against PostgreSQL. No `EACCES` or unexpected forwarded-header validation error was produced by the application.
 - Local image build used an uncommitted proxy-CA adapter for this environment. The committed Dockerfile retains plain `npm ci` for Railway compatibility. The short root initialization only adjusts the target directory owner, not existing files or permissions; HTTP/database work runs after privilege drop.
 - Railway variable changes and deployment are still required. Preserve the existing volume, set production variables, align `UPLOAD_DIR` with `/var/uploads`, and deploy this branch. No production files or database data were modified during local validation.
+
+## Device resizing and VoIP — 2026-11-01
+
+- Nine automated tests passed, including persisted node width/height and VoIP type, rejection of out-of-range sizes, legacy nodes without dimensions, and the existing account/storage/PostgreSQL workflows.
+- Chromium against a private PostgreSQL schema verified adding a VoIP phone, numeric dimension changes, mouse corner resizing, saved size restoration, touch corner resizing, and numeric mobile controls. Existing port editing, mobile panning, device dragging, and coordinate preservation checks also passed.
+- PDF export succeeded and `pdftotext` confirmed the VoIP phone label and existing port schedule. PDF rectangles use the saved device dimensions.
+- Syntax and whitespace checks passed. No database migration is needed; Railway deployment and physical-device testing remain outstanding.
