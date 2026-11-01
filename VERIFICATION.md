@@ -34,3 +34,5 @@ Still required: authenticated Railway deployment, public HTTPS/domain checks, ac
 ## Production diagnostics — 2026-11-01
 
 Seven tests passed with the real PostgreSQL startup test enabled. Verified generated request IDs, correlated server error logs, safe browser references, release identifiers, unhealthy-schema logs, and exclusion of query strings and session cookies from structured request records. Production error responses do not expose database error text. Schema readiness now validates user status/session-version columns. Production failure remains unconfirmed pending the deployed health/login responses or runtime error details.
+
+A follow-up PostgreSQL process test also verified that a promoted super-admin can sign in and render both the dashboard (with an existing client) and Team page successfully. This did not reproduce the reported production error; the production health and login pages were reported working by the user.

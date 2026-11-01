@@ -46,5 +46,10 @@ test('real server initializes an empty PostgreSQL schema and preserves sessions 
  const promoted=spawnSync(process.execPath,['scripts/create-super-admin.js','startup@example.test','Super Owner'],{cwd:new URL('../',import.meta.url),env:{...process.env,DATABASE_URL:url.toString()},input:'secure-super-admin-password\n',encoding:'utf8'});
  assert.equal(promoted.status,0,promoted.stderr);
  const owner=(await db.query('SELECT role,is_active,password_hash FROM users WHERE email=$1',['startup@example.test'])).rows[0];assert.equal(owner.role,'superadmin');assert.equal(owner.is_active,true);assert.equal(await bcrypt.compare('secure-super-admin-password',owner.password_hash),true);
+ const ownerAgent=request.agent(base);const ownerLogin=await ownerAgent.get('/login');const ownerToken=ownerLogin.text.match(/name="csrf-token" content="([^"]+)"/)[1];
+ assert.equal((await ownerAgent.post('/login').type('form').send({_csrf:ownerToken,email:'startup@example.test',password:'secure-super-admin-password'})).status,302);
+ const ownerDashboard=await ownerAgent.get('/');assert.equal(ownerDashboard.status,200);assert.match(ownerDashboard.text,/Preserved client/);
+ assert.equal((await ownerAgent.get('/users')).status,200);
+
  await stop(child);
 });
