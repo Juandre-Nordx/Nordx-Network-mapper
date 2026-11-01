@@ -126,3 +126,11 @@ Railway service/environment identifiers enable production mode even if `NODE_ENV
 ## Device sizes and VoIP phones
 
 Choose **VoIP phone** in the device Type list and click **Add device**. New devices appear in the current view and are selected immediately. Select any device to show its bottom-right resize handle. Drag that handle with a mouse or touch, or use the **Width**, **Height**, and **Apply size** controls below the canvas. Save the diagram to retain the size. Width is limited to 80–360 and height to 48–240; resizing or moving keeps the device inside the diagram. Pan canvas mode moves the view instead of resizing devices. Existing devices retain the original 130 × 54 default until resized. PDF exports reflect saved sizes and label VoIP phones. Device size metadata uses the existing JSONB diagram; no database migration is needed for this feature.
+
+## Cabinets and named device groups
+
+Use **Cabinets & device groups** below the canvas to create a name such as “Main cabinet” or “Floor 2 rack”. Creating a group assigns the currently selected device. Choose **Manage devices** to check several devices at once; selecting a device already in another group moves it to the chosen group. You can also select a device and change its **Cabinet / group** field, including **Ungrouped**. Each device belongs to at most one group in a plan.
+
+Groups appear as named outlines that automatically fit their members, including resized devices. Drag the header with mouse or touch to move all member devices together; their relative positions and connections are preserved. Pan canvas mode navigates the view instead. Use **Choose group** to rename a group, manage its members, or remove it. Removing a group keeps its devices and connections. Save the diagram to retain changes. Empty groups remain in the controls but have no canvas outline until devices are assigned.
+
+PDF exports include group outlines and a cabinet/device membership list. Up to 100 groups per plan and 80 characters per group name are supported. Group data uses the diagram JSONB; existing diagrams without groups remain supported and no database migration is required.
