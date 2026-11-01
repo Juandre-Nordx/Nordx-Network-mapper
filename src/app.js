@@ -1,3 +1,4 @@
+import {isProduction,proxyHops,uploadDirectory} from './config.js';
 import {verifySchema} from './db.js';
 import express from 'express';
 import session from 'express-session';
@@ -17,11 +18,12 @@ const text=z.string().trim().min(1).max(200);
 const optional=z.string().trim().max(2000).default('');
 const diagramSchema=z.object({backgroundUploadId:z.number().int().positive().nullable().optional(),nodes:z.array(z.object({id:z.string().max(80),label:text,type:text,x:z.number().min(0).max(1200),y:z.number().min(0).max(800)})).max(300),edges:z.array(z.object({from:z.string().max(80),to:z.string().max(80),masterPort:z.string().trim().min(1).max(64).optional(),slavePort:z.string().trim().min(1).max(64).optional()})).max(600)}).superRefine((d,ctx)=>{const ids=new Set(d.nodes.map(n=>n.id));if(ids.size!==d.nodes.length || d.edges.some(e=>!ids.has(e.from)||!ids.has(e.to)||Boolean(e.masterPort)!==Boolean(e.slavePort)))ctx.addIssue({code:'custom',message:'Invalid diagram references'});});
 export const templates={blank:{nodes:[],edges:[]},office:{nodes:[{id:'router',label:'Gateway',type:'router',x:150,y:100},{id:'switch',label:'Core switch',type:'switch',x:450,y:100},{id:'ap',label:'Wireless AP',type:'wifi',x:750,y:250}],edges:[{from:'router',to:'switch'},{from:'switch',to:'ap'}]},cctv:{nodes:[{id:'nvr',label:'NVR',type:'nvr',x:450,y:100},{id:'cam1',label:'Entrance camera',type:'camera',x:200,y:350},{id:'cam2',label:'Parking camera',type:'camera',x:750,y:350}],edges:[{from:'nvr',to:'cam1'},{from:'nvr',to:'cam2'}]}};
-export function createApp({db,sessionStore,uploadDir=process.env.UPLOAD_DIR||path.join(root,'var/uploads'),production=process.env.NODE_ENV==='production',sessionSecret=process.env.SESSION_SECRET}) {
+export function createApp({db,sessionStore,production=isProduction(),uploadDir=uploadDirectory(process.env,production),sessionSecret=process.env.SESSION_SECRET,trustProxy=proxyHops(process.env,production)}) {
  if(!sessionSecret || sessionSecret.length<32) throw new Error('SESSION_SECRET must contain at least 32 characters.');
  const app=express();
  app.disable('x-powered-by');
- if(production) app.set('trust proxy',1);
+ app.set('env',production?'production':'development');
+ app.set('trust proxy',trustProxy);
  app.set('views',path.join(root,'views'));app.set('view engine','ejs');
  app.use(helmet({contentSecurityPolicy:{directives:{'upgrade-insecure-requests':production?[]:null,'img-src':["'self'","data:"],'script-src':["'self'"],'style-src':["'self'","'unsafe-inline'"]}}}));
  app.use(express.static(path.join(root,'public')));
