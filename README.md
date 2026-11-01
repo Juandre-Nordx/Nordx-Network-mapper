@@ -27,7 +27,7 @@ New application built with Node.js 24, Express 5, EJS, and PostgreSQL. There is 
 - Super-administrator, administrator, and technician roles; super-admins manage other accounts, reset passwords, change roles, and disable/re-enable access.
 - Clients and sites, with explicit technician assignments per client.
 - Network and CCTV plans with blank, office, and CCTV templates.
-- Drag devices, connect nodes, delete selected devices, save and reopen diagrams.
+- Drag devices, connect nodes with master/slave port labels, delete selected devices, save and reopen diagrams.
 - Site equipment inventories.
 - Private PNG/JPEG uploads with a 10 MB limit and file-signature checks.
 - Floor-plan image backgrounds saved with the plan.
@@ -98,3 +98,7 @@ unset owner_password
 ```
 
 Use your actual email and name. This command creates the account or promotes the matching existing email, replaces its password, enables it, and revokes its previous sessions. It applies the safe schema migration first. Use the web service's existing `DATABASE_URL`; do not paste production credentials or passwords into chat. Sign in with that email and password, then open **Team**. No built-in super-admin password is created. Ordinary administrators retain account-creation access for administrators and technicians; they cannot modify existing users or grant super-admin privileges.
+
+## Connection ports
+
+Click **Connect devices**, select the master device first and the slave device second. Enter both port names (for example, master `Gi0/1` and slave `ether2`), then click **Apply connection** and **Save diagram**. Labels appear beside the connection as **M** (master) and **S** (slave). Click an existing connection, or focus it and press Enter, to edit its ports. Cancelling adds no connection. An identical connection/port pair is rejected. Port names accept up to 64 characters. Existing diagrams without port labels remain valid; edit a connection to add its ports. PDF exports include a separate connection-port schedule. Port metadata uses the existing diagram JSONB, so no database migration is required for this feature.

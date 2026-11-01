@@ -29,10 +29,16 @@ test('authenticated planning workflow, persistence, exports, uploads and authori
  r=await post(client+'/sites',{name:'Main Site',address:'Test address'});assert.equal(r.status,302);const site=r.headers.location;
  r=await post(site+'/plans',{name:'Office',kind:'network',template:'office'});assert.equal(r.status,302);const plan=r.headers.location;
  assert.equal((await a.get(site)).status,200);assert.equal((await a.get(plan)).status,200);
- const diagram={nodes:[{id:'one',label:'Core router',type:'router',x:100,y:100},{id:'two',label:'Camera',type:'camera',x:300,y:200}],edges:[{from:'one',to:'two'}]};
+ const diagram={nodes:[{id:'one',label:'Core router',type:'router',x:100,y:100},{id:'two',label:'Camera',type:'camera',x:300,y:200}],edges:[{from:'one',to:'two',masterPort:'Gi0/1',slavePort:'ether2'}]};
  assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send(diagram)).status,200);
  assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send({...diagram,edges:[{from:'missing',to:'two'}]})).status,400);
  assert.match((await a.get(plan)).text,/Core router/);
+ assert.match((await a.get(plan)).text,/Gi0\/1/);
+ assert.match((await a.get(plan)).text,/ether2/);
+ assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send({...diagram,edges:[{from:'one',to:'two',masterPort:'Gi0/1'}]})).status,400);
+ assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send({...diagram,edges:[{from:'one',to:'two'}]})).status,200,'Legacy unlabelled connections remain supported');
+ assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send(diagram)).status,200);
+ assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send({...diagram,edges:[{from:'one',to:'two',masterPort:'x'.repeat(65),slavePort:'ether2'}]})).status,400);
  assert.deepEqual((await db.query('SELECT diagram FROM plans WHERE id=1')).rows[0].diagram,diagram);
  const pdf=await a.get(plan+'/pdf');assert.equal(pdf.status,200);assert.equal(pdf.headers['content-type'],'application/pdf');assert.ok(pdf.body.subarray(0,4).equals(Buffer.from('%PDF')));
  assert.equal((await post(site+'/equipment',{name:'Camera',kind:'camera',ip:'10.0.0.2',notes:'Entrance'})).status,302);assert.match((await a.get(site)).text,/10.0.0.2/);

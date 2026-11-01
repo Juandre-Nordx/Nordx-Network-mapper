@@ -30,3 +30,9 @@ Still required: authenticated Railway deployment, public HTTPS/domain checks, ac
 - Verified the schema upgrade preserves legacy users and password hashes and adds account status/session-version defaults.
 - Verified the stdin-based `create-super-admin` command promotes an existing account and hashes its new password against PostgreSQL.
 - Syntax validation and diff whitespace checks passed. No production account has been created from this environment; the deployment operator must run the secure creation command in the Railway web service.
+
+## Connection port labels — 2026-11-01
+
+- Six automated tests passed with the PostgreSQL startup workflow enabled. Diagram API coverage verifies master/slave port persistence, rejection of overlong or incomplete port pairs, and support for legacy connections without port metadata.
+- Chromium against a private PostgreSQL schema verified the master/slave dialog, cancellation without mutation, canvas labels, saving/reopening, editing an existing link, and rejecting duplicate endpoint/port pairs. The exported PDF was downloaded and checked with `pdftotext`; both master and slave device names and ports appeared in the connection schedule.
+- Syntax checks and diff whitespace checks passed. Existing diagrams and the database schema are preserved. Railway deployment has not been performed from this environment.
