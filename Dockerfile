@@ -2,7 +2,7 @@
 FROM node:24-bookworm-slim AS dependencies
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN --mount=type=secret,id=proxy_ca if [ -f /run/secrets/proxy_ca ]; then NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca npm ci --omit=dev --strict-ssl=true; else npm ci --omit=dev --strict-ssl=true; fi
+RUN npm ci --omit=dev --strict-ssl=true
 
 FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production PORT=3000 UPLOAD_DIR=/data/uploads
