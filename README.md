@@ -102,3 +102,7 @@ Use your actual email and name. This command creates the account or promotes the
 ## Connection ports
 
 Click **Connect devices**, select the master device first and the slave device second. Enter both port names (for example, master `Gi0/1` and slave `ether2`), then click **Apply connection** and **Save diagram**. Labels appear beside the connection as **M** (master) and **S** (slave). Click an existing connection, or focus it and press Enter, to edit its ports. Cancelling adds no connection. An identical connection/port pair is rejected. Port names accept up to 64 characters. Existing diagrams without port labels remain valid; edit a connection to add its ports. PDF exports include a separate connection-port schedule. Port metadata uses the existing diagram JSONB, so no database migration is required for this feature.
+
+## Mobile canvas navigation
+
+On a phone or desktop, drag empty canvas space to pan around the diagram. Enable **Pan canvas** to pan from anywhere, including over a device or connection, without editing it. Turn Pan canvas off to drag devices normally; **Connect devices** also turns it off. **Reset view** restores the starting view. Small screens use a closer starting view, and the canvas resizes with the viewport. Navigation stays local to the view and never changes saved device coordinates or connection data. Floor-plan images move with the devices as you pan. Scroll the page outside the canvas to reach the rest of the screen. Pinch zoom is not part of this change.
