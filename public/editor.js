@@ -1,3 +1,4 @@
+import {deviceColor,deviceTextColor} from './device-colors.js';
 const svg=document.querySelector('#diagram');
 const data=JSON.parse(document.querySelector('#initial-diagram').textContent);
 const ns='http://www.w3.org/2000/svg';
@@ -33,6 +34,10 @@ const slaveInput=document.querySelector('#slave-port');
 const portError=document.querySelector('#port-error');
 const sizeForm=document.querySelector('#device-size-form');
 const widthInput=document.querySelector('#device-width'),heightInput=document.querySelector('#device-height');
+const colorInput=document.querySelector('#device-color');
+function changeDeviceColor(){const node=data.nodes.find(n=>n.id===selected);if(!node)return;node.color=colorInput.value;dirty=true;render();status.textContent='Device colour updated. Save your diagram.';}
+colorInput.addEventListener('input',changeDeviceColor);colorInput.addEventListener('change',changeDeviceColor);
+document.querySelector('#reset-device-color').onclick=()=>{const node=data.nodes.find(n=>n.id===selected);if(!node)return;node.color='#ffffff';dirty=true;render();status.textContent='Device colour reset. Save your diagram.';};
 function dimensions(node){return {width:node.width??130,height:node.height??54};}
 function resizeDevice(node,width,height){
  node.width=Math.round(Math.max(80,Math.min(360,width)));node.height=Math.round(Math.max(48,Math.min(240,height)));
@@ -94,7 +99,7 @@ function portLabel(a,b,ratio,label){
  t.textContent=label.length>28?label.slice(0,27)+'…':label;return t;
 }
 function render(){
- const chosen=data.nodes.find(n=>n.id===selected);renderGroupControls(chosen);sizeForm.hidden=!chosen;if(chosen){const size=dimensions(chosen);widthInput.value=size.width;heightInput.value=size.height;}
+ const chosen=data.nodes.find(n=>n.id===selected);renderGroupControls(chosen);sizeForm.hidden=!chosen;if(chosen){const size=dimensions(chosen);widthInput.value=size.width;heightInput.value=size.height;colorInput.value=deviceColor(chosen);}
  svg.replaceChildren();
  const defs=el('defs',{}),pattern=el('pattern',{id:'canvas-dots',width:20,height:20,patternUnits:'userSpaceOnUse'});
  pattern.append(el('circle',{cx:1,cy:1,r:1,fill:'#bfcfc3'}));defs.append(pattern);svg.append(defs);
@@ -121,10 +126,11 @@ function render(){
  });
  for(const n of data.nodes){
   const g=el('g',{'data-id':n.id,transform:`translate(${n.x},${n.y})`,tabindex:0,role:'button','aria-label':n.label});
-  const {width,height}=dimensions(n);
-  g.append(el('rect',{x:-width/2,y:-height/2,width,height,rx:9,fill:n.id===selected?'#C4E9AD':'#fff',stroke:'#153E35','stroke-width':2}));
-  const t=el('text',{'text-anchor':'middle',y:-2,fill:'#153E35','font-size':14});const maxChars=Math.max(5,Math.floor((width-16)/7));t.textContent=n.label.length>maxChars?n.label.slice(0,maxChars-1)+'…':n.label;
-  const s=el('text',{'text-anchor':'middle',y:17,fill:'#537267','font-size':11});s.textContent=n.type==='voip'?'VoIP phone':n.type;g.append(t,s);
+  const {width,height}=dimensions(n),color=deviceColor(n),textColor=deviceTextColor(color);
+  g.append(el('rect',{x:-width/2,y:-height/2,width,height,rx:9,fill:color,stroke:'#153E35','stroke-width':2}));
+  if(n.id===selected)g.append(el('rect',{x:-width/2-4,y:-height/2-4,width:width+8,height:height+8,rx:12,fill:'none',stroke:'#237ec4','stroke-width':3,'stroke-dasharray':'6 3','pointer-events':'none'}));
+  const t=el('text',{'text-anchor':'middle',y:-2,fill:textColor,'font-size':14});const maxChars=Math.max(5,Math.floor((width-16)/7));t.textContent=n.label.length>maxChars?n.label.slice(0,maxChars-1)+'…':n.label;
+  const s=el('text',{'text-anchor':'middle',y:17,fill:textColor,'font-size':11});s.textContent=n.type==='voip'?'VoIP phone':n.type;g.append(t,s);
   if(n.id===selected&&!connecting&&!panMode)g.append(el('rect',{'data-resize':n.id,x:width/2-14,y:height/2-14,width:28,height:28,rx:5,fill:'#153E35',stroke:'#fff','stroke-width':2,tabindex:0,role:'button','aria-label':'Resize '+n.label}));
   svg.append(g);
  }
@@ -190,7 +196,7 @@ svg.addEventListener('pointermove',e=>{
 });
 function endGesture(e){if(e.pointerId!==activePointer)return;drag=null;pan=null;resize=null;groupDrag=null;activePointer=null;svg.classList.remove('is-panning');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId);}
 svg.addEventListener('pointerup',endGesture);svg.addEventListener('pointercancel',endGesture);svg.addEventListener('lostpointercapture',endGesture);
-document.querySelector('#add').onclick=()=>{if(data.nodes.length>=300)return;const id=crypto.randomUUID();data.nodes.push({id,label:document.querySelector('#label').value.trim()||'Device',type:document.querySelector('#type').value,x:Math.max(65,Math.min(1135,view.x+view.width/2)),y:Math.max(27,Math.min(773,view.y+view.height/2))});selected=id;dirty=true;render();};
+document.querySelector('#add').onclick=()=>{if(data.nodes.length>=300)return;const id=crypto.randomUUID();data.nodes.push({id,color:document.querySelector('#new-device-color').value,label:document.querySelector('#label').value.trim()||'Device',type:document.querySelector('#type').value,x:Math.max(65,Math.min(1135,view.x+view.width/2)),y:Math.max(27,Math.min(773,view.y+view.height/2))});selected=id;dirty=true;render();};
 document.querySelector('#connect').onclick=e=>{setPanMode(false);connecting=!connecting;source=null;e.target.textContent=connecting?'Finish connecting':'Connect devices';status.textContent=connecting?'Select the master device, then the slave device.':'Drag devices to position them. Click a connection to edit ports.';render();};
 document.querySelector('#remove').onclick=()=>{data.nodes=data.nodes.filter(n=>n.id!==selected);data.edges=data.edges.filter(e=>e.from!==selected&&e.to!==selected);selected=null;source=null;dirty=true;render();};
 document.querySelector('#save').onclick=async()=>{status.textContent='Saving…';try{const r=await fetch(`/plans/${svg.dataset.planId}/diagram`,{method:'POST',headers:{'content-type':'application/json','x-csrf-token':document.querySelector('meta[name="csrf-token"]').content},body:JSON.stringify(data)});if(!r.ok||r.redirected||!(r.headers.get('content-type')||'').includes('application/json'))throw Error();dirty=false;status.textContent='Diagram saved.';}catch{status.textContent='Save failed. Check your connection and sign-in status.';}};

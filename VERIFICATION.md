@@ -63,3 +63,10 @@ Still required: authenticated Railway deployment, public HTTPS/domain checks, ac
 - Desktop/mobile Chromium against PostgreSQL verified creation, batch assignment, renaming, per-device ungrouping, reassignment from another group, deletion without loss of devices/connections, and saved/reopened group outlines. Mouse and touch header dragging preserved member offsets.
 - PDF download succeeded; `pdftotext` confirmed the cabinet name, its device list, and the existing connection port schedule. JavaScript syntax and whitespace checks passed.
 - Railway deployment and physical-device validation remain outstanding. No database migration is needed for this feature.
+
+## Device network colours — 2026-11-01
+
+- Ten automated tests passed. Coverage includes saved colour metadata, rejection of malformed/non-hex colour values, legacy fallback colours, and readable black/white label selection.
+- Desktop/mobile Chromium against PostgreSQL verified new-device colours, recolouring selected devices, reset-to-white, preservation of the assigned fill during selection, saved/reopened colours, and compatibility with cabinet groups and existing port connections.
+- PDF drawing inspection with PyMuPDF confirmed that exported device fills contain the assigned blue (#2563eb) and yellow (#fde047) RGB values. PDF text, syntax, and whitespace checks passed.
+- This branch includes the preceding cabinet-group feature. Railway deployment and physical-device checks remain outstanding; no database migration is needed.
