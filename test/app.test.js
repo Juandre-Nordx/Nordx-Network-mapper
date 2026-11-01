@@ -65,3 +65,12 @@ test('production cookies, required secrets, and database health failures',async(
  const unhealthy=createApp({db:{query:async()=>{throw Error('offline');}},sessionStore:new session.MemoryStore(),production:false,sessionSecret:'x'.repeat(64)});
  const health=await request(unhealthy).get('/health');assert.equal(health.status,503);assert.doesNotMatch(health.headers['content-security-policy'],/upgrade-insecure-requests/);
 });
+
+test('health rejects a connected PostgreSQL database without the sessions table',async t=>{
+ const db=new PGlite();t.after(()=>db.close());
+ await db.exec(await readFile(new URL('../src/schema.sql',import.meta.url),'utf8'));
+ const app=createApp({db,sessionStore:new session.MemoryStore(),sessionSecret:'x'.repeat(64),production:false});
+ assert.equal((await request(app).get('/health')).status,200);
+ await db.query('DROP TABLE sessions');
+ assert.equal((await request(app).get('/health')).status,503);
+});

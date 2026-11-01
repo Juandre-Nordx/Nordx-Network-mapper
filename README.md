@@ -20,7 +20,7 @@ New application built with Node.js 24, Express 5, EJS, and PostgreSQL. There is 
    ```
 
 6. Run `npm run dev`. For local readiness, request `/health` and confirm `{"status":"ok"}`. Sign in at `/login`.
-7. Run `npm test` and `npm run build`. The build command validates JavaScript syntax; there is no asset compilation. Tests use embedded PostgreSQL (PGlite) by default; set `TEST_DATABASE_URL` to a **dedicated empty test database** to test against a PostgreSQL server. Tests create sample records and must never target production.
+7. Run `npm test` and `npm run build`. The build command validates JavaScript syntax; there is no asset compilation. Tests use embedded PostgreSQL (PGlite) by default; set `TEST_DATABASE_URL` to a **dedicated empty test database** to test against a PostgreSQL server. Tests create sample records and must never target production. To run the real-process startup regression, set `STARTUP_TEST_DATABASE_URL` to a development PostgreSQL database and run `npm test`. It creates and removes a unique private schema, exercises real PostgreSQL sessions across process restarts, and tests recovery from a missing sessions table. The database user needs permission to create schemas. Without this variable, that server-backed test is explicitly skipped.
 
 ## Features
 
@@ -53,7 +53,7 @@ Deployment requires authenticated Railway access and access to this GitHub repos
 
    Railway supplies `PORT`; the server binds to `0.0.0.0`. Preserve database URL TLS settings and use verified certificates if connecting through TLS. No credentials belong in source control.
 3. Add a persistent volume mounted at `/data`. Confirm it is writable by UID/GID 1000 (the container's `node` user). The image runs as a non-root user; a root-owned volume may need its ownership prepared through Railway's supported volume controls before startup. Do not store permanent uploads on the ephemeral filesystem.
-4. Generate the public domain under Networking, set `APP_URL` to its HTTPS address, then deploy. Railway runs `npm run migrate` as its pre-deploy command before starting the web process. Do not put migrations into every replica's startup command.
+4. Generate the public domain under Networking, set `APP_URL` to its HTTPS address, then deploy. `npm start` runs the additive, transactional migrations against the web service's own `DATABASE_URL` before opening the HTTP listener. A PostgreSQL advisory lock serializes concurrent startup migrations. The server exits if migration or schema validation fails, and `/health` checks that all required tables, including `sessions`, exist. A separate pre-deploy command is not required. No records are deleted or seeded during startup.
 5. Run the one-time administrator command above **inside the deployed service** using Railway's service shell/SSH facilities; do not use `railway run` for a private database unless the local machine has access to that private network. No automatic seeding runs.
 6. Verify `/health` returns HTTP 200 and sign in. Exercise the checklist below before declaring production ready.
 
@@ -79,3 +79,7 @@ This is an initial implementation, not a fully audited production release. There
 ## Operations
 
 Logs go to stdout/stderr without logging request bodies or secrets. `/health` checks database connectivity. Shutdown handles SIGTERM/SIGINT. Back up PostgreSQL **and** `/data/uploads` together: metadata is in PostgreSQL, image bytes are on the volume. Treat session secrets as credentials; rotating them signs out current sessions. Keep Node/container and npm dependencies updated. Never run tests against the production database.
+
+### Recovering a missing sessions table
+
+If logs report `relation "sessions" does not exist`, the database selected by the running web service has not received the schema. Deploy the startup initialization fix and keep the start command as `npm start`; startup will create the missing tables safely before accepting requests. Alternatively, run `npm run migrate` inside that Railway web service, using its existing `DATABASE_URL`, then restart it. Do not drop the database or regenerate the session secret. Verify the logs show `Database schema ready.` followed by the listening message, and request `/health` before signing in. If creation fails, check that the selected PostgreSQL user has schema/table creation permission and that the service points to the intended database.

@@ -1,3 +1,4 @@
+import {verifySchema} from './db.js';
 import express from 'express';
 import session from 'express-session';
 import pgSession from 'connect-pg-simple';
@@ -24,7 +25,7 @@ export function createApp({db,sessionStore,uploadDir=process.env.UPLOAD_DIR||pat
  app.set('views',path.join(root,'views'));app.set('view engine','ejs');
  app.use(helmet({contentSecurityPolicy:{directives:{'upgrade-insecure-requests':production?[]:null,'img-src':["'self'","data:"],'script-src':["'self'"],'style-src':["'self'","'unsafe-inline'"]}}}));
  app.use(express.static(path.join(root,'public')));
- app.get('/health',async(req,res)=>{try{await db.query('SELECT 1');res.json({status:'ok'});}catch{res.status(503).json({status:'unavailable'});}});
+ app.get('/health',async(req,res)=>{try{await verifySchema(db);res.json({status:'ok'});}catch{res.status(503).json({status:'unavailable'});}});
  const Store=pgSession(session);
  app.use(session({store:sessionStore||new Store({pool:db,tableName:'sessions'}),secret:sessionSecret,resave:false,saveUninitialized:false,name:'nordx.sid',cookie:{httpOnly:true,secure:production,sameSite:'lax',maxAge:8*60*60*1000}}));
  app.use(express.urlencoded({extended:false,limit:'100kb'}));app.use(express.json({limit:'250kb'}));
