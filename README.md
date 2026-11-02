@@ -138,3 +138,7 @@ PDF exports include group outlines and a cabinet/device membership list. Up to 1
 ## Device network colours
 
 Choose **Device colour** in the toolbar before adding devices to give them a common network colour. To recolour an existing device, select it and use **Network colour** in the controls below the canvas. **Reset colour** sets it to white. Click **Save diagram** to retain the colour. Selection uses a separate dashed outline so the assigned network colour stays visible; device labels automatically use black or white for readable contrast. Saved colours are included in PDF exports. Colours do not change cabinet membership, connections, equipment records, or permissions. Existing devices without a colour retain their original canvas/PDF defaults. No database migration is required.
+
+## Larger network workspace and PDF reports
+
+The drawing area is 2400 × 1600, with a wider and taller editor. Pan to reach the extra space; existing device positions and floor-plan backgrounds keep their alignment. Save the diagram before exporting. PDF reports show the client company name and last-saved date (South African time), fit the saved network to the page, and label connections with **M:** (master port) and **S:** (slave port) directly on the diagram. The connection-port schedule remains available on a separate page.

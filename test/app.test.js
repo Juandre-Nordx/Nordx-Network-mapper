@@ -29,8 +29,9 @@ test('authenticated planning workflow, persistence, exports, uploads and authori
  r=await post(client+'/sites',{name:'Main Site',address:'Test address'});assert.equal(r.status,302);const site=r.headers.location;
  r=await post(site+'/plans',{name:'Office',kind:'network',template:'office'});assert.equal(r.status,302);const plan=r.headers.location;
  assert.equal((await a.get(site)).status,200);assert.equal((await a.get(plan)).status,200);
- const diagram={groups:[{id:'cabinet-a',name:'Main Cabinet'}],nodes:[{id:'one',label:'Core router',type:'router',x:100,y:100,width:180,height:90,color:'#2563eb',groupId:'cabinet-a'},{id:'two',label:'Desk phone',type:'voip',x:300,y:200,groupId:'cabinet-a'}],edges:[{from:'one',to:'two',masterPort:'Gi0/1',slavePort:'ether2'}]};
+ const diagram={groups:[{id:'cabinet-a',name:'Main Cabinet'}],nodes:[{id:'one',label:'Core router',type:'router',x:100,y:100,width:180,height:90,color:'#2563eb',groupId:'cabinet-a'},{id:'two',label:'Desk phone',type:'voip',x:2100,y:1300,groupId:'cabinet-a'}],edges:[{from:'one',to:'two',masterPort:'Gi0/1',slavePort:'ether2'}]};
  assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send(diagram)).status,200);
+ assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send({...diagram,nodes:diagram.nodes.map(n=>({...n,x:2401}))})).status,400);
  assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send({...diagram,edges:[{from:'missing',to:'two'}]})).status,400);
  assert.match((await a.get(plan)).text,/Core router/);
  assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send({...diagram,nodes:diagram.nodes.map((n,i)=>i===0?{...n,color:'url(https://example.test)'}:n)})).status,400);
