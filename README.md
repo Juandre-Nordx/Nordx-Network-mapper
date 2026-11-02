@@ -142,3 +142,7 @@ Choose **Device colour** in the toolbar before adding devices to give them a com
 ## Larger network workspace and PDF reports
 
 The drawing area is 2400 × 1600, with a wider and taller editor. Pan to reach the extra space; existing device positions and floor-plan backgrounds keep their alignment. Save the diagram before exporting. PDF reports show the client company name and last-saved date (South African time), fit the saved network to the page, and label connections with **M:** (master port) and **S:** (slave port) directly on the diagram. The connection-port schedule remains available on a separate page.
+
+## Routing connections
+
+Click an existing connection to choose Ethernet cable, fibre, wireless, coax, or other, then apply and save. To route a connection, open it and choose **Route connection**. Click the canvas to insert anchor points along the closest segment, then drag the points into place. Select an anchor and press Delete to remove it, or use arrow keys to move it. Choose **Finish routing** and **Save diagram**. **Clear anchor points** restores a straight connection. Each connection supports 30 anchors. Routes and connection types are retained on reload and in PDF exports; wireless links use a dashed line.

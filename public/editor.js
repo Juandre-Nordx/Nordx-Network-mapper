@@ -1,8 +1,10 @@
+import {routePoints,alongRoute,insertAnchor,connectionType} from './connection-route.js';
 import {deviceColor,deviceTextColor} from './device-colors.js';
 import {CANVAS_WIDTH,CANVAS_HEIGHT} from './diagram-layout.js';
 const svg=document.querySelector('#diagram');
 const data=JSON.parse(document.querySelector('#initial-diagram').textContent);
 const ns='http://www.w3.org/2000/svg';
+let routeEdge=null,anchorDrag=null;
 let selected=null,connecting=false,source=null,drag=null,dirty=false,pending=null,pan=null,panMode=false,activePointer=null,resize=null;
 const view={x:0,y:0,width:1200,height:800};
 const panButton=document.querySelector('#pan-canvas');
@@ -118,11 +120,13 @@ function render(){
   const a=data.nodes.find(n=>n.id===edge.from),b=data.nodes.find(n=>n.id===edge.to);if(!a||!b)return;
   const g=el('g',{'data-edge-index':index,tabindex:0,role:'button','aria-label':`${a.label} master port ${edge.masterPort||'unspecified'} to ${b.label} slave port ${edge.slavePort||'unspecified'}. Edit connection ports.`});
   const title=el('title',{});title.textContent=g.getAttribute('aria-label');g.append(title);
-  g.append(el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'transparent','stroke-width':18}));
-  g.append(el('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:'#8da69a','stroke-width':3}));
-  const start=boundary(a,b),end=boundary(b,a);
-  if(edge.masterPort)g.append(portLabel(start,end,0.28,'M: '+edge.masterPort));
-  if(edge.slavePort)g.append(portLabel(start,end,0.72,'S: '+edge.slavePort));
+  const points=routePoints(edge,a,b),coords=points.map(p=>`${p.x},${p.y}`).join(' ');
+  g.append(el('polyline',{points:coords,fill:'none',stroke:'transparent','stroke-width':18}));
+  g.append(el('polyline',{points:coords,fill:'none',stroke:routeEdge===index?'#237ec4':'#8da69a','stroke-width':3,...(edge.connectionType==='wireless'?{'stroke-dasharray':'10 7'}:{})}));
+  for(const [value,fraction] of [[edge.masterPort&&'M: '+edge.masterPort,.16],[connectionType(edge),.5],[edge.slavePort&&'S: '+edge.slavePort,.84]]){
+   if(!value)continue;const p=alongRoute(points,fraction);g.append(portLabel(p,{x:p.x+p.dx,y:p.y+p.dy},0,value));
+  }
+  if(routeEdge===index)(edge.anchors||[]).forEach((p,i)=>g.append(el('circle',{cx:p.x,cy:p.y,r:10,fill:'#fff',stroke:'#237ec4','stroke-width':3,'data-anchor':i,tabindex:0,role:'button','aria-label':`Anchor ${i+1}. Arrow keys move; Delete removes.`})));
   svg.append(g);
  });
  for(const n of data.nodes){
@@ -140,6 +144,7 @@ function openPorts(from,to,index=null){
  const a=data.nodes.find(n=>n.id===from),b=data.nodes.find(n=>n.id===to);if(!a||!b)return;
  pending={from,to,index};const edge=index===null?null:data.edges[index];
  document.querySelector('#port-devices').textContent=`Master device: ${a.label}. Slave device: ${b.label}.`;
+ document.querySelector('#connection-type').value=edge?.connectionType||'cable';document.querySelector('#edit-route').hidden=index===null;document.querySelector('#clear-route').hidden=index===null;
  masterInput.value=edge?.masterPort||'';slaveInput.value=edge?.slavePort||'';portError.textContent='';
  source=null;dialog.showModal();masterInput.focus();
 }
@@ -151,9 +156,14 @@ portForm.addEventListener('submit',e=>{
  const duplicate=data.edges.some((edge,i)=>i!==index&&((edge.from===from&&edge.to===to&&edge.masterPort===masterPort&&edge.slavePort===slavePort)||(edge.from===to&&edge.to===from&&edge.masterPort===slavePort&&edge.slavePort===masterPort)));
  if(duplicate){portError.textContent='This connection already exists with these ports.';return;}
  if(index===null&&data.edges.length>=600){portError.textContent='A plan can contain at most 600 connections.';return;}
- const edge={from,to,masterPort,slavePort};if(index===null)data.edges.push(edge);else data.edges[index]=edge;
+ const edge={...(index===null?{}:data.edges[index]),from,to,masterPort,slavePort,connectionType:document.querySelector('#connection-type').value};if(index===null)data.edges.push(edge);else data.edges[index]=edge;
  dirty=true;dialog.close();render();status.textContent='Connection ports applied. Save your diagram.';
 });
+const finishRoute=document.querySelector('#finish-route');
+finishRoute.onclick=()=>{routeEdge=null;finishRoute.hidden=true;render();status.textContent='Route updated. Save your diagram.';};
+document.querySelector('#edit-route').onclick=()=>{if(pending?.index==null)return;routeEdge=pending.index;setPanMode(false);connecting=false;source=null;document.querySelector('#connect').textContent='Connect devices';finishRoute.hidden=false;dialog.close();render();status.textContent='Click the canvas to add anchors. Drag anchors to route the connection. Choose Finish routing, then Save diagram.';};
+document.querySelector('#clear-route').onclick=()=>{if(pending?.index==null)return;data.edges[pending.index].anchors=[];dirty=true;dialog.close();render();status.textContent='Anchors cleared. Save your diagram.';};
+svg.addEventListener('keydown',e=>{const handle=e.target.closest('[data-anchor]');if(!handle||routeEdge===null)return;const edge=data.edges[routeEdge],i=Number(handle.dataset.anchor),p=edge.anchors[i];if(['Delete','Backspace'].includes(e.key)){e.preventDefault();edge.anchors.splice(i,1);}else if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();p.x=Math.max(0,Math.min(CANVAS_WIDTH,p.x+(e.key==='ArrowRight'?10:e.key==='ArrowLeft'?-10:0)));p.y=Math.max(0,Math.min(CANVAS_HEIGHT,p.y+(e.key==='ArrowDown'?10:e.key==='ArrowUp'?-10:0)));}else return;dirty=true;render();svg.querySelector(`[data-anchor="${i}"]`)?.focus();});
 function cancelledPorts(){status.textContent=connecting?'Connection cancelled. Select the master device.':'Port edit cancelled.';}
 document.querySelector('#port-cancel').onclick=()=>{cancelledPorts();dialog.close();};
 dialog.addEventListener('cancel',cancelledPorts);
@@ -169,6 +179,12 @@ function chooseDevice(id){
 function point(e){return new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());}
 svg.addEventListener('pointerdown',e=>{
  if(!e.isPrimary||e.button!==0||activePointer!==null)return;
+ if(routeEdge!==null&&!panMode){
+  const edge=data.edges[routeEdge],handle=e.target.closest('[data-anchor]');e.preventDefault();
+  if(handle){anchorDrag=edge.anchors[Number(handle.dataset.anchor)];activePointer=e.pointerId;svg.setPointerCapture(e.pointerId);handle.focus();return;}
+  if(edge.anchors?.length>=30){status.textContent='A connection supports up to 30 anchor points.';return;}
+  const p=point(e);p.x=Math.max(0,Math.min(CANVAS_WIDTH,p.x));p.y=Math.max(0,Math.min(CANVAS_HEIGHT,p.y));insertAnchor(edge,data.nodes.find(n=>n.id===edge.from),data.nodes.find(n=>n.id===edge.to),p);dirty=true;render();return;
+ }
  const edge=e.target.closest('[data-edge-index]'),g=e.target.closest('[data-id]'),cabinet=e.target.closest('[data-group-handle]');
  if(panMode||(!edge&&!g&&!cabinet)){
   e.preventDefault();const rect=svg.getBoundingClientRect();
@@ -190,16 +206,17 @@ svg.addEventListener('pointerdown',e=>{
 svg.addEventListener('keydown',e=>{if(!['Enter',' '].includes(e.key))return;const groupHandle=e.target.closest('[data-group-handle]');if(groupHandle){e.preventDefault();activeGroupId=groupHandle.dataset.groupHandle;render();groupPicker.focus();return;}if(e.target.closest('[data-resize]')){e.preventDefault();widthInput.focus();return;}const edge=e.target.closest('[data-edge-index]'),node=e.target.closest('[data-id]');if(!edge&&!node)return;e.preventDefault();if(edge){const index=Number(edge.dataset.edgeIndex),connection=data.edges[index];openPorts(connection.from,connection.to,index);}else chooseDevice(node.dataset.id);});
 svg.addEventListener('pointermove',e=>{
  if(e.pointerId!==activePointer)return;
+ if(anchorDrag){const p=point(e);anchorDrag.x=Math.max(0,Math.min(CANVAS_WIDTH,p.x));anchorDrag.y=Math.max(0,Math.min(CANVAS_HEIGHT,p.y));dirty=true;render();return;}
  if(pan){e.preventDefault();view.x=pan.x-(e.clientX-pan.clientX)*pan.scaleX;view.y=pan.y-(e.clientY-pan.clientY)*pan.scaleY;applyView();return;}
  if(groupDrag){const p=point(e),members=groupDrag.members;const minX=Math.max(...members.map(m=>dimensions(m.node).width/2-m.x)),maxX=Math.min(...members.map(m=>CANVAS_WIDTH-dimensions(m.node).width/2-m.x)),minY=Math.max(...members.map(m=>dimensions(m.node).height/2-m.y)),maxY=Math.min(...members.map(m=>CANVAS_HEIGHT-dimensions(m.node).height/2-m.y));const dx=Math.max(minX,Math.min(maxX,p.x-groupDrag.x)),dy=Math.max(minY,Math.min(maxY,p.y-groupDrag.y));for(const m of members){m.node.x=m.x+dx;m.node.y=m.y+dy;}dirty=true;render();return;}
  if(resize){const p=point(e);resizeDevice(resize.n,resize.width+2*(p.x-resize.startX),resize.height+2*(p.y-resize.startY));return;}
  if(!drag)return;const p=point(e),size=dimensions(drag.n);drag.n.x=Math.max(size.width/2,Math.min(CANVAS_WIDTH-size.width/2,p.x-drag.dx));drag.n.y=Math.max(size.height/2,Math.min(CANVAS_HEIGHT-size.height/2,p.y-drag.dy));dirty=true;render();
 });
-function endGesture(e){if(e.pointerId!==activePointer)return;drag=null;pan=null;resize=null;groupDrag=null;activePointer=null;svg.classList.remove('is-panning');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId);}
+function endGesture(e){if(e.pointerId!==activePointer)return;if(anchorDrag&&routeEdge!==null){const i=data.edges[routeEdge].anchors.indexOf(anchorDrag);svg.querySelector(`[data-anchor="${i}"]`)?.focus();}anchorDrag=null;drag=null;pan=null;resize=null;groupDrag=null;activePointer=null;svg.classList.remove('is-panning');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId);}
 svg.addEventListener('pointerup',endGesture);svg.addEventListener('pointercancel',endGesture);svg.addEventListener('lostpointercapture',endGesture);
 document.querySelector('#add').onclick=()=>{if(data.nodes.length>=300)return;const id=crypto.randomUUID();data.nodes.push({id,color:document.querySelector('#new-device-color').value,label:document.querySelector('#label').value.trim()||'Device',type:document.querySelector('#type').value,x:Math.max(65,Math.min(CANVAS_WIDTH-65,view.x+view.width/2)),y:Math.max(27,Math.min(CANVAS_HEIGHT-27,view.y+view.height/2))});selected=id;dirty=true;render();};
 document.querySelector('#connect').onclick=e=>{setPanMode(false);connecting=!connecting;source=null;e.target.textContent=connecting?'Finish connecting':'Connect devices';status.textContent=connecting?'Select the master device, then the slave device.':'Drag devices to position them. Click a connection to edit ports.';render();};
-document.querySelector('#remove').onclick=()=>{data.nodes=data.nodes.filter(n=>n.id!==selected);data.edges=data.edges.filter(e=>e.from!==selected&&e.to!==selected);selected=null;source=null;dirty=true;render();};
+document.querySelector('#remove').onclick=()=>{routeEdge=null;finishRoute.hidden=true;data.nodes=data.nodes.filter(n=>n.id!==selected);data.edges=data.edges.filter(e=>e.from!==selected&&e.to!==selected);selected=null;source=null;dirty=true;render();};
 document.querySelector('#save').onclick=async()=>{status.textContent='Saving…';try{const r=await fetch(`/plans/${svg.dataset.planId}/diagram`,{method:'POST',headers:{'content-type':'application/json','x-csrf-token':document.querySelector('meta[name="csrf-token"]').content},body:JSON.stringify(data)});if(!r.ok||r.redirected||!(r.headers.get('content-type')||'').includes('application/json'))throw Error();dirty=false;status.textContent='Diagram saved.';}catch{status.textContent='Save failed. Check your connection and sign-in status.';}};
 const background=document.querySelector('#background');
 function setBackground(){render();}
