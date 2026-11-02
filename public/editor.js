@@ -1,4 +1,5 @@
 import {deviceColor,deviceTextColor} from './device-colors.js';
+import {CANVAS_WIDTH,CANVAS_HEIGHT} from './diagram-layout.js';
 const svg=document.querySelector('#diagram');
 const data=JSON.parse(document.querySelector('#initial-diagram').textContent);
 const ns='http://www.w3.org/2000/svg';
@@ -7,8 +8,8 @@ const view={x:0,y:0,width:1200,height:800};
 const panButton=document.querySelector('#pan-canvas');
 let viewInitialized=false;
 function applyView(){
- view.x=view.width>=1600?(1200-view.width)/2:Math.max(-200,Math.min(1400-view.width,view.x));
- view.y=view.height>=1200?(800-view.height)/2:Math.max(-200,Math.min(1000-view.height,view.y));
+ view.x=view.width>=CANVAS_WIDTH+400?(CANVAS_WIDTH-view.width)/2:Math.max(-200,Math.min(CANVAS_WIDTH+200-view.width,view.x));
+ view.y=view.height>=CANVAS_HEIGHT+400?(CANVAS_HEIGHT-view.height)/2:Math.max(-200,Math.min(CANVAS_HEIGHT+200-view.height,view.y));
  svg.setAttribute('viewBox',`${view.x} ${view.y} ${view.width} ${view.height}`);
 }
 function sizeView(reset=false){
@@ -41,7 +42,7 @@ document.querySelector('#reset-device-color').onclick=()=>{const node=data.nodes
 function dimensions(node){return {width:node.width??130,height:node.height??54};}
 function resizeDevice(node,width,height){
  node.width=Math.round(Math.max(80,Math.min(360,width)));node.height=Math.round(Math.max(48,Math.min(240,height)));
- node.x=Math.max(node.width/2,Math.min(1200-node.width/2,node.x));node.y=Math.max(node.height/2,Math.min(800-node.height/2,node.y));
+ node.x=Math.max(node.width/2,Math.min(CANVAS_WIDTH-node.width/2,node.x));node.y=Math.max(node.height/2,Math.min(CANVAS_HEIGHT-node.height/2,node.y));
  dirty=true;render();
 }
 sizeForm.addEventListener('submit',e=>{e.preventDefault();const node=data.nodes.find(n=>n.id===selected);if(!node||!sizeForm.reportValidity())return;resizeDevice(node,Number(widthInput.value),Number(heightInput.value));status.textContent='Device size updated. Save your diagram.';});
@@ -103,7 +104,7 @@ function render(){
  svg.replaceChildren();
  const defs=el('defs',{}),pattern=el('pattern',{id:'canvas-dots',width:20,height:20,patternUnits:'userSpaceOnUse'});
  pattern.append(el('circle',{cx:1,cy:1,r:1,fill:'#bfcfc3'}));defs.append(pattern);svg.append(defs);
- svg.append(el('rect',{x:0,y:0,width:1200,height:800,fill:'url(#canvas-dots)'}));
+ svg.append(el('rect',{x:0,y:0,width:CANVAS_WIDTH,height:CANVAS_HEIGHT,fill:'url(#canvas-dots)'}));
  if(background.value)svg.append(el('image',{x:0,y:0,width:1200,height:800,href:`/uploads/${background.value}`,preserveAspectRatio:'xMidYMid meet','pointer-events':'none'}));
  for(const group of data.groups){
   const bounds=groupBounds(group);if(!bounds)continue;
@@ -190,13 +191,13 @@ svg.addEventListener('keydown',e=>{if(!['Enter',' '].includes(e.key))return;cons
 svg.addEventListener('pointermove',e=>{
  if(e.pointerId!==activePointer)return;
  if(pan){e.preventDefault();view.x=pan.x-(e.clientX-pan.clientX)*pan.scaleX;view.y=pan.y-(e.clientY-pan.clientY)*pan.scaleY;applyView();return;}
- if(groupDrag){const p=point(e),members=groupDrag.members;const minX=Math.max(...members.map(m=>dimensions(m.node).width/2-m.x)),maxX=Math.min(...members.map(m=>1200-dimensions(m.node).width/2-m.x)),minY=Math.max(...members.map(m=>dimensions(m.node).height/2-m.y)),maxY=Math.min(...members.map(m=>800-dimensions(m.node).height/2-m.y));const dx=Math.max(minX,Math.min(maxX,p.x-groupDrag.x)),dy=Math.max(minY,Math.min(maxY,p.y-groupDrag.y));for(const m of members){m.node.x=m.x+dx;m.node.y=m.y+dy;}dirty=true;render();return;}
+ if(groupDrag){const p=point(e),members=groupDrag.members;const minX=Math.max(...members.map(m=>dimensions(m.node).width/2-m.x)),maxX=Math.min(...members.map(m=>CANVAS_WIDTH-dimensions(m.node).width/2-m.x)),minY=Math.max(...members.map(m=>dimensions(m.node).height/2-m.y)),maxY=Math.min(...members.map(m=>CANVAS_HEIGHT-dimensions(m.node).height/2-m.y));const dx=Math.max(minX,Math.min(maxX,p.x-groupDrag.x)),dy=Math.max(minY,Math.min(maxY,p.y-groupDrag.y));for(const m of members){m.node.x=m.x+dx;m.node.y=m.y+dy;}dirty=true;render();return;}
  if(resize){const p=point(e);resizeDevice(resize.n,resize.width+2*(p.x-resize.startX),resize.height+2*(p.y-resize.startY));return;}
- if(!drag)return;const p=point(e),size=dimensions(drag.n);drag.n.x=Math.max(size.width/2,Math.min(1200-size.width/2,p.x-drag.dx));drag.n.y=Math.max(size.height/2,Math.min(800-size.height/2,p.y-drag.dy));dirty=true;render();
+ if(!drag)return;const p=point(e),size=dimensions(drag.n);drag.n.x=Math.max(size.width/2,Math.min(CANVAS_WIDTH-size.width/2,p.x-drag.dx));drag.n.y=Math.max(size.height/2,Math.min(CANVAS_HEIGHT-size.height/2,p.y-drag.dy));dirty=true;render();
 });
 function endGesture(e){if(e.pointerId!==activePointer)return;drag=null;pan=null;resize=null;groupDrag=null;activePointer=null;svg.classList.remove('is-panning');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId);}
 svg.addEventListener('pointerup',endGesture);svg.addEventListener('pointercancel',endGesture);svg.addEventListener('lostpointercapture',endGesture);
-document.querySelector('#add').onclick=()=>{if(data.nodes.length>=300)return;const id=crypto.randomUUID();data.nodes.push({id,color:document.querySelector('#new-device-color').value,label:document.querySelector('#label').value.trim()||'Device',type:document.querySelector('#type').value,x:Math.max(65,Math.min(1135,view.x+view.width/2)),y:Math.max(27,Math.min(773,view.y+view.height/2))});selected=id;dirty=true;render();};
+document.querySelector('#add').onclick=()=>{if(data.nodes.length>=300)return;const id=crypto.randomUUID();data.nodes.push({id,color:document.querySelector('#new-device-color').value,label:document.querySelector('#label').value.trim()||'Device',type:document.querySelector('#type').value,x:Math.max(65,Math.min(CANVAS_WIDTH-65,view.x+view.width/2)),y:Math.max(27,Math.min(CANVAS_HEIGHT-27,view.y+view.height/2))});selected=id;dirty=true;render();};
 document.querySelector('#connect').onclick=e=>{setPanMode(false);connecting=!connecting;source=null;e.target.textContent=connecting?'Finish connecting':'Connect devices';status.textContent=connecting?'Select the master device, then the slave device.':'Drag devices to position them. Click a connection to edit ports.';render();};
 document.querySelector('#remove').onclick=()=>{data.nodes=data.nodes.filter(n=>n.id!==selected);data.edges=data.edges.filter(e=>e.from!==selected&&e.to!==selected);selected=null;source=null;dirty=true;render();};
 document.querySelector('#save').onclick=async()=>{status.textContent='Saving…';try{const r=await fetch(`/plans/${svg.dataset.planId}/diagram`,{method:'POST',headers:{'content-type':'application/json','x-csrf-token':document.querySelector('meta[name="csrf-token"]').content},body:JSON.stringify(data)});if(!r.ok||r.redirected||!(r.headers.get('content-type')||'').includes('application/json'))throw Error();dirty=false;status.textContent='Diagram saved.';}catch{status.textContent='Save failed. Check your connection and sign-in status.';}};
