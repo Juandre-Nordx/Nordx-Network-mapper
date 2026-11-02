@@ -29,8 +29,10 @@ test('authenticated planning workflow, persistence, exports, uploads and authori
  r=await post(client+'/sites',{name:'Main Site',address:'Test address'});assert.equal(r.status,302);const site=r.headers.location;
  r=await post(site+'/plans',{name:'Office',kind:'network',template:'office'});assert.equal(r.status,302);const plan=r.headers.location;
  assert.equal((await a.get(site)).status,200);assert.equal((await a.get(plan)).status,200);
- const diagram={groups:[{id:'cabinet-a',name:'Main Cabinet'}],nodes:[{id:'one',label:'Core router',type:'router',x:100,y:100,width:180,height:90,color:'#2563eb',groupId:'cabinet-a'},{id:'two',label:'Desk phone',type:'voip',x:2100,y:1300,groupId:'cabinet-a'}],edges:[{from:'one',to:'two',masterPort:'Gi0/1',slavePort:'ether2'}]};
+ const diagram={groups:[{id:'cabinet-a',name:'Main Cabinet'}],nodes:[{id:'one',label:'Core router',type:'router',x:100,y:100,width:180,height:90,color:'#2563eb',groupId:'cabinet-a'},{id:'two',label:'Desk phone',type:'voip',x:2100,y:1300,groupId:'cabinet-a'}],edges:[{from:'one',to:'two',masterPort:'Gi0/1',slavePort:'ether2',connectionType:'fibre',anchors:[{x:400,y:100},{x:400,y:1200}]}]};
  assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send(diagram)).status,200);
+ const savedDiagram=(await db.query('SELECT diagram FROM plans WHERE id=$1',[Number(plan.split('/').pop())])).rows[0].diagram;assert.equal(savedDiagram.edges[0].connectionType,'fibre');assert.deepEqual(savedDiagram.edges[0].anchors,diagram.edges[0].anchors);
+ for(const invalid of [{connectionType:'unknown'},{anchors:[{x:2401,y:0}]},{anchors:Array.from({length:31},()=>({x:1,y:1}))}])assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send({...diagram,edges:[{...diagram.edges[0],...invalid}]})).status,400);
  assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send({...diagram,nodes:diagram.nodes.map(n=>({...n,x:2401}))})).status,400);
  assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send({...diagram,edges:[{from:'missing',to:'two'}]})).status,400);
  assert.match((await a.get(plan)).text,/Core router/);
