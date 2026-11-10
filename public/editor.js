@@ -36,6 +36,26 @@ const masterInput=document.querySelector('#master-port');
 const slaveInput=document.querySelector('#slave-port');
 const portError=document.querySelector('#port-error');
 const sizeForm=document.querySelector('#device-size-form');
+const detailsForm=document.querySelector('#device-details-form');
+const detailFields={label:document.querySelector('#device-label'),type:document.querySelector('#device-type'),ip:document.querySelector('#device-ip'),model:document.querySelector('#device-model'),notes:document.querySelector('#device-notes')};
+let detailsNodeId=null,detailsDirty=false;
+function loadDeviceDetails(node){
+ detailsForm.hidden=!node;detailsNodeId=node?.id??null;detailsDirty=false;detailFields.label.setCustomValidity('');
+ if(!node)return;
+ const type=detailFields.type;
+ for(const option of [...type.options])if(option.dataset.legacy)option.remove();
+ if(![...type.options].some(option=>option.value===node.type)){const option=new Option(node.type,node.type);option.dataset.legacy='true';type.add(option);}
+ for(const [key,input] of Object.entries(detailFields))input.value=node[key]||'';
+}
+for(const input of Object.values(detailFields))input.addEventListener('input',()=>{detailsDirty=true;});
+detailsForm.addEventListener('submit',e=>{
+ e.preventDefault();const node=data.nodes.find(n=>n.id===selected);if(!node||!detailsForm.reportValidity())return;
+ const label=detailFields.label.value.trim();if(!label){detailFields.label.setCustomValidity('Enter a device name.');detailFields.label.reportValidity();return;}
+ for(const [key,input] of Object.entries(detailFields))node[key]=input.value.trim();
+ dirty=true;loadDeviceDetails(node);render();status.textContent='Device details applied. Save your diagram.';
+});
+detailFields.label.addEventListener('input',()=>detailFields.label.setCustomValidity(''));
+document.querySelector('#reset-device-details').onclick=()=>loadDeviceDetails(data.nodes.find(n=>n.id===selected));
 const widthInput=document.querySelector('#device-width'),heightInput=document.querySelector('#device-height');
 const colorInput=document.querySelector('#device-color');
 function changeDeviceColor(){const node=data.nodes.find(n=>n.id===selected);if(!node)return;node.color=colorInput.value;dirty=true;render();status.textContent='Device colour updated. Save your diagram.';}
@@ -102,7 +122,7 @@ function portLabel(a,b,ratio,label){
  t.textContent=label.length>28?label.slice(0,27)+'…':label;return t;
 }
 function render(){
- const chosen=data.nodes.find(n=>n.id===selected);renderGroupControls(chosen);sizeForm.hidden=!chosen;if(chosen){const size=dimensions(chosen);widthInput.value=size.width;heightInput.value=size.height;colorInput.value=deviceColor(chosen);}
+ const chosen=data.nodes.find(n=>n.id===selected);if((chosen?.id??null)!==detailsNodeId)loadDeviceDetails(chosen);detailsForm.hidden=!chosen;renderGroupControls(chosen);sizeForm.hidden=!chosen;if(chosen){const size=dimensions(chosen);widthInput.value=size.width;heightInput.value=size.height;colorInput.value=deviceColor(chosen);}
  svg.replaceChildren();
  const defs=el('defs',{}),pattern=el('pattern',{id:'canvas-dots',width:20,height:20,patternUnits:'userSpaceOnUse'});
  pattern.append(el('circle',{cx:1,cy:1,r:1,fill:'#bfcfc3'}));defs.append(pattern);svg.append(defs);
@@ -169,6 +189,7 @@ document.querySelector('#port-cancel').onclick=()=>{cancelledPorts();dialog.clos
 dialog.addEventListener('cancel',cancelledPorts);
 dialog.addEventListener('close',()=>{pending=null;source=null;});
 function chooseDevice(id){
+ if(detailsDirty&&id!==selected){status.textContent='Apply or reset the current device details before selecting another device.';return;}
  selected=id;const selectedNode=data.nodes.find(n=>n.id===id);if(selectedNode?.groupId)activeGroupId=selectedNode.groupId;
  if(connecting){
   if(source&&source!==id){const from=source;const legacyIndex=data.edges.findIndex(e=>e.from===from&&e.to===id&&!e.masterPort&&!e.slavePort);openPorts(from,id,legacyIndex<0?null:legacyIndex);}
@@ -200,7 +221,7 @@ svg.addEventListener('pointerdown',e=>{
  const handle=e.target.closest('[data-resize]');
  if(handle&&!connecting){e.preventDefault();const n=data.nodes.find(n=>n.id===handle.dataset.resize),p=point(e);resize={n,startX:p.x,startY:p.y,...dimensions(n)};activePointer=e.pointerId;svg.setPointerCapture(e.pointerId);return;}
  if(edge){const index=Number(edge.dataset.edgeIndex),connection=data.edges[index];openPorts(connection.from,connection.to,index);return;}
- const id=g.dataset.id;chooseDevice(id);
+ const id=g.dataset.id;chooseDevice(id);if(selected!==id)return;
  if(!connecting){e.preventDefault();const n=data.nodes.find(n=>n.id===id),p=point(e);drag={n,dx:p.x-n.x,dy:p.y-n.y};activePointer=e.pointerId;svg.setPointerCapture(e.pointerId);}
 });
 svg.addEventListener('keydown',e=>{if(!['Enter',' '].includes(e.key))return;const groupHandle=e.target.closest('[data-group-handle]');if(groupHandle){e.preventDefault();activeGroupId=groupHandle.dataset.groupHandle;render();groupPicker.focus();return;}if(e.target.closest('[data-resize]')){e.preventDefault();widthInput.focus();return;}const edge=e.target.closest('[data-edge-index]'),node=e.target.closest('[data-id]');if(!edge&&!node)return;e.preventDefault();if(edge){const index=Number(edge.dataset.edgeIndex),connection=data.edges[index];openPorts(connection.from,connection.to,index);}else chooseDevice(node.dataset.id);});
@@ -217,9 +238,9 @@ svg.addEventListener('pointerup',endGesture);svg.addEventListener('pointercancel
 document.querySelector('#add').onclick=()=>{if(data.nodes.length>=300)return;const id=crypto.randomUUID();data.nodes.push({id,color:document.querySelector('#new-device-color').value,label:document.querySelector('#label').value.trim()||'Device',type:document.querySelector('#type').value,x:Math.max(65,Math.min(CANVAS_WIDTH-65,view.x+view.width/2)),y:Math.max(27,Math.min(CANVAS_HEIGHT-27,view.y+view.height/2))});selected=id;dirty=true;render();};
 document.querySelector('#connect').onclick=e=>{setPanMode(false);connecting=!connecting;source=null;e.target.textContent=connecting?'Finish connecting':'Connect devices';status.textContent=connecting?'Select the master device, then the slave device.':'Drag devices to position them. Click a connection to edit ports.';render();};
 document.querySelector('#remove').onclick=()=>{routeEdge=null;finishRoute.hidden=true;data.nodes=data.nodes.filter(n=>n.id!==selected);data.edges=data.edges.filter(e=>e.from!==selected&&e.to!==selected);selected=null;source=null;dirty=true;render();};
-document.querySelector('#save').onclick=async()=>{status.textContent='Saving…';try{const r=await fetch(`/plans/${svg.dataset.planId}/diagram`,{method:'POST',headers:{'content-type':'application/json','x-csrf-token':document.querySelector('meta[name="csrf-token"]').content},body:JSON.stringify(data)});if(!r.ok||r.redirected||!(r.headers.get('content-type')||'').includes('application/json'))throw Error();dirty=false;status.textContent='Diagram saved.';}catch{status.textContent='Save failed. Check your connection and sign-in status.';}};
+document.querySelector('#save').onclick=async()=>{if(detailsDirty){status.textContent='Apply or reset your device details before saving.';detailsForm.scrollIntoView({block:'center',behavior:'smooth'});return;}status.textContent='Saving…';try{const r=await fetch(`/plans/${svg.dataset.planId}/diagram`,{method:'POST',headers:{'content-type':'application/json','x-csrf-token':document.querySelector('meta[name="csrf-token"]').content},body:JSON.stringify(data)});if(!r.ok||r.redirected||!(r.headers.get('content-type')||'').includes('application/json'))throw Error();dirty=false;status.textContent='Diagram saved.';}catch{status.textContent='Save failed. Check your connection and sign-in status.';}};
 const background=document.querySelector('#background');
 function setBackground(){render();}
 background.value=data.backgroundUploadId?String(data.backgroundUploadId):'';
 background.onchange=()=>{data.backgroundUploadId=background.value?Number(background.value):null;dirty=true;setBackground();};
-window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});render();sizeView(true);
+window.addEventListener('beforeunload',e=>{if(dirty||detailsDirty){e.preventDefault();e.returnValue='';}});render();sizeView(true);
