@@ -146,3 +146,7 @@ The drawing area is 2400 × 1600, with a wider and taller editor. Pan to reach t
 ## Routing connections
 
 Click an existing connection to choose Ethernet cable, fibre, wireless, coax, or other, then apply and save. To route a connection, open it and choose **Route connection**. Click the canvas to insert anchor points along the closest segment, then drag the points into place. Select an anchor and press Delete to remove it, or use arrow keys to move it. Choose **Finish routing** and **Save diagram**. **Clear anchor points** restores a straight connection. Each connection supports 30 anchors. Routes and connection types are retained on reload and in PDF exports; wireless links use a dashed line.
+
+## Editing device details
+
+Select a device on the canvas to open **Device details** below the diagram. Edit its name, type, IP address, make/model, and notes, then choose **Apply device details** and **Save diagram**. **Reset changes** restores that device's currently applied values. Existing device IDs, positions, connections, colours, sizes, and cabinet assignments are preserved. Name/type changes also appear in PDF diagrams and connection schedules.

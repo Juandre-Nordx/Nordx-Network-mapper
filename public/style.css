@@ -7,3 +7,5 @@ dialog{border:1px solid #ccd6cd;border-radius:15px;padding:28px;color:#153E35;wi
 input[type=color]{min-width:64px;width:80px;height:44px;padding:4px;cursor:pointer}
 
 main:has(#diagram){max-width:1800px;padding-left:3%;padding-right:3%}#diagram{height:clamp(480px,75vh,1000px);height:clamp(480px,75svh,1000px)}
+
+.device-details[hidden]{display:none}.device-details{margin-top:20px;padding:20px;background:#f1f6ed;border:1px solid #dce4d9;border-radius:10px}.device-details .row{margin-bottom:16px}.device-details .row label{min-width:160px}.device-details textarea{min-height:75px}

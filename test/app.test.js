@@ -31,6 +31,13 @@ test('authenticated planning workflow, persistence, exports, uploads and authori
  assert.equal((await a.get(site)).status,200);assert.equal((await a.get(plan)).status,200);
  const diagram={groups:[{id:'cabinet-a',name:'Main Cabinet'}],nodes:[{id:'one',label:'Core router',type:'router',x:100,y:100,width:180,height:90,color:'#2563eb',groupId:'cabinet-a'},{id:'two',label:'Desk phone',type:'voip',x:2100,y:1300,groupId:'cabinet-a'}],edges:[{from:'one',to:'two',masterPort:'Gi0/1',slavePort:'ether2',connectionType:'fibre',anchors:[{x:400,y:100},{x:400,y:1200}]}]};
  assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send(diagram)).status,200);
+ const edited=structuredClone(diagram);Object.assign(edited.nodes[0],{label:'Updated core router',type:'switch',ip:'192.168.1.10',model:'CRS326',notes:'Main cabinet — serial 123'});
+ assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send(edited)).status,200);
+ const persisted=(await db.query('SELECT diagram FROM plans WHERE id=$1',[Number(plan.split('/').pop())])).rows[0].diagram;
+ assert.deepEqual(persisted.nodes[0],edited.nodes[0]);assert.deepEqual(persisted.edges,diagram.edges);
+ for(const invalid of [{label:'   '},{ip:'x'.repeat(201)},{model:'x'.repeat(201)},{notes:'x'.repeat(2001)}])assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send({...edited,nodes:[{...edited.nodes[0],...invalid},edited.nodes[1]]})).status,400);
+ assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send(diagram)).status,200);
+
  const savedDiagram=(await db.query('SELECT diagram FROM plans WHERE id=$1',[Number(plan.split('/').pop())])).rows[0].diagram;assert.equal(savedDiagram.edges[0].connectionType,'fibre');assert.deepEqual(savedDiagram.edges[0].anchors,diagram.edges[0].anchors);
  for(const invalid of [{connectionType:'unknown'},{anchors:[{x:2401,y:0}]},{anchors:Array.from({length:31},()=>({x:1,y:1}))}])assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send({...diagram,edges:[{...diagram.edges[0],...invalid}]})).status,400);
  assert.equal((await a.post(plan+'/diagram').set('x-csrf-token',token).send({...diagram,nodes:diagram.nodes.map(n=>({...n,x:2401}))})).status,400);
